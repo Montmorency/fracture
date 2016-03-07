@@ -1,5 +1,7 @@
 from cStringIO import StringIO
 import sys
+import pickle
+
 import ase.units as units
 from   ase.lattice import bulk
 from   ase.lattice.cubic import Diamond
@@ -35,12 +37,12 @@ crack_params = {
 	'tip_move_tol'      : 10.0,    # Distance tip has to move before crack
                                  # is taken to be running
 	'strain_rate'       : 1e-5*(1.0/units.fs),
-	'traj_interval'     : 10,                    # Number of time steps between
-	'traj_file'         : 'traj_lotf_2.xyz',     # Trajectory output file in (NetCDF format)
-	'restart_traj_file' : 'traj_lotf_2b.xyz',    # Trajectory output file in (NetCDF format)
+	'traj_interval'     : 10,                   # Number of time steps between
+	'traj_file'         : 'traj_lotf_2.xyz',    # Trajectory output file in (NetCDF format)
+	'restart_traj_file' : 'traj_lotf_2b.xyz',   # Trajectory output file in (NetCDF format)
 	'print_interval'    : 10,           # time steps between trajectory prints 10 fs
 	'param_file'        : 'params.xml', # Filename of XML file containing
-                                       # potential parameters
+                                      # potential parameters
 	'mm_init_args'      : 'IP SW',        # Classical potential
 	'qm_init_args'      : 'TB DFTB',      # Initialisation arguments for QM potential
 	'qm_inner_radius'   : 15.0*units.Ang, # Inner hysteretic radius for QM region
@@ -84,7 +86,8 @@ class CrackCell(object):
 		self.crack_front     = (1,1,1)
 		self.a0              = 5.4309
 		self.c               = []
-#Initialize with dictionary
+
+#Initialize the crack object with a dictionary of the relevant parameters
 		for key in kwargs:
 			setattr(self, key, kwargs[key])
 
@@ -180,8 +183,8 @@ class CrackCell(object):
 		ypos = crack_slab.positions[:,1]
 		crack_slab.positions[:,1] += thin_strip_displacement_y(xpos, ypos, strain, seed, tip)
 		print('Applied initial load: strain=%.4f, G=%.2f J/m^2' %
-		      (strain, self.initial_G / (units.J / units.m**2)))
-		pot     = Potential(self.mm_init_args, param_filename=self.param_file)
+	       (strain, self.initial_G / (units.J / units.m**2)))
+		pot      = Potential(self.mm_init_args, param_filename=self.param_file)
 		crack_slab.set_calculator(pot)
 		slab_opt = Minim(crack_slab, relax_positions=True, relax_cell=False)
 		slab_opt.run(fmax=self.relax_fmax)
