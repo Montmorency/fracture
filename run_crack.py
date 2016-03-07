@@ -32,14 +32,13 @@ cutoff_skin = 2.0*units.Ang    # Amount by which potential cutoff is increased
 tip_move_tol = 10.0            # Distance tip has to move before crack
                                # is taken to be running
 strain_rate = 1e-5*(1.0/units.fs) 
-traj_interval = 10             # Number of time steps between
-print_interval = 10            # time steps between trajectory prints 10 fs
-param_file = 'params.xml'      # Filename of XML file containing
-                               # potential parameters
-mm_init_args = 'IP SW'         # Classical potential
-input_file  = 'crack.xyz'      # crack_slab
-traj_file      = 'traj_lotf_2b.xyz'    # Trajectory output file in (NetCDF format)
-
+traj_interval = 10              # Number of time steps between
+print_interval = 10             # time steps between trajectory prints 10 fs
+param_file = 'params.xml'       # Filename of XML file containing
+                                # potential parameters
+mm_init_args = 'IP SW'          # Classical potential
+input_file   = 'crack.xyz'        # crack_slab
+traj_file    = 'traj_lotf_2b.xyz' # Trajectory output file in (NetCDF format)
 
 #Restart from last point in trajectory file:
 if __name__=='__main__':
