@@ -13,6 +13,7 @@ from quippy.crack import(get_strain, get_energy_release_rate,
 from quippy import set_fortran_indexing
 from quippy.potential import ForceMixingPotential
 from quippy.lotf import LOTFDynamics, update_hysteretic_qm_region
+from quippy.clusters import HYBRID_NO_MARK, HYBRID_ACTIVE_MARK
 
 #simulation parameters
 qm_init_args      = 'TB DFTB'       # Initialisation arguments for QM potential
@@ -66,7 +67,8 @@ def fix_edges(atoms):
 
 def pass_print_context(atoms, dynamics):
 	def printstatus():
-		if dynamics.nsteps == 1:
+		#if dynamics.nsteps == 1:
+		if (dynamics.nsteps%20)==0:
 			print """
 State      Time/fs    Temp/K     Strain      G/(J/m^2)  CrackPos/A D(CrackPos)/A 
 ---------------------------------------------------------------------------------"""
@@ -91,20 +93,19 @@ State      Time/fs    Temp/K     Strain      G/(J/m^2)  CrackPos/A D(CrackPos)/A
 #pot2 is the high precision, i.e. QM potential
 def set_qmmm_pot(atoms, crack_pos):
 	qmmm_pot = ForceMixingPotential(pot1=sw_pot, pot2=qm_pot, atoms=atoms,
-                                qm_args_str='single_cluster cluster_periodic_z carve_cluster '+
-                               'terminate cluster_hopping=F randomise_buffer=F',
-                                fit_hops=4,
-                                lotf_spring_hops=3,
-                                hysteretic_buffer=True,
-                                hysteretic_buffer_inner_radius=qm_inner_radius,
-                                hysteretic_buffer_outer_radius=qm_outer_radius,
-                                cluster_hopping_nneighb_only=False,
-                                min_images_only=True)
-
+                               qm_args_str='single_cluster cluster_periodic_z carve_cluster '+
+                              'terminate cluster_hopping=F randomise_buffer=F',
+                               fit_hops=4,
+                               lotf_spring_hops=3,
+                               hysteretic_buffer=True,
+                               hysteretic_buffer_inner_radius=qm_inner_radius,
+                               hysteretic_buffer_outer_radius=qm_outer_radius,
+                               cluster_hopping_nneighb_only=False,
+                               min_images_only=True)
 	qmmm_pot.atoms = atoms
 	atoms.set_calculator(qmmm_pot)
-	qm_list = update_hysteretic_qm_region(atoms, [], crack_pos, qm_inner_radius, 
-                                      qm_outer_radius, update_marks=True)
+	qm_list = update_hysteretic_qm_region(atoms, [], crack_pos, qm_inner_radius,
+                                        qm_outer_radius, update_marks=True)
 	qmmm_pot.set_qm_atoms(qm_list)
 	return qmmm_pot
 
@@ -117,7 +118,6 @@ def pass_trajectory_context(trajectory, dynamics):
 # Prevents Strain from being incremented behind the crack tip
 def check_if_cracked_context(strain_atoms):
 	def check_if_cracked(atoms):
-# why not qmmm_pot here?
 		orig_crack_pos = atoms.info['CrackPos'].copy()
 		crack_pos = find_crack_tip_stress_field(atoms, calc=sw_pot)
 		if not atoms.info['is_cracked'] and (crack_pos[0] - orig_crack_pos[0]) > tip_move_tol:
@@ -125,13 +125,16 @@ def check_if_cracked_context(strain_atoms):
 			del atoms.constraints[atoms.constraints.index(strain_atoms)]
 	return check_if_cracked
 
-def pass_qmmm_context(qmmm_pot, atoms):
+def update_qm_region_context(qmmm_pot, atoms):
 	def update_qm_region(atoms):
 		crack_pos = find_crack_tip_stress_field(atoms, calc=sw_pot)
 		qm_list   = qmmm_pot.get_qm_atoms()
-		qm_list   = update_hysteretic_qm_region(atoms, qm_list, crack_pos, qm_inner_radius, qm_outer_radius)
+		qm_list   = update_hysteretic_qm_region(atoms, qm_list, crack_pos, qm_inner_radius, 
+																						qm_outer_radius, update_marks=True)
 		qmmm_pot.set_qm_atoms(qm_list)
-
+#lets try setting the atoms object properties by hand?
+		atoms.hybrid[:] = HYBRID_NO_MARK
+		atoms.hybrid[qm_list] = HYBRID_ACTIVE_MARK
 	return update_qm_region
 
 if __name__=='__main__':

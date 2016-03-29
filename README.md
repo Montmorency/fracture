@@ -13,7 +13,7 @@ the intended cleavage plane. Also generates a file 'crack.xyz'
 with a relaxed initial crack_slab.
 
 simulate_crack.py contains the helper functions that are attached to
-an LOTFDynamics object i.e. traj_writer, set the qmmm potentials etc.
+an LOTFDynamics object i.e. the traj_writer, the qm/mm potentials etc.
 
 In the submission script we execute:
 
@@ -25,8 +25,5 @@ name of the output file with:
 		python run_crack.py --restart 'file' --output 'outputfile'
 
 The default start file name is 'crack.xyz' default output is 'traj.xyz'
-
-
-
 
 
