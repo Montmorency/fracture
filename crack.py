@@ -69,8 +69,8 @@ default_crack_params = {
 # with gen_inputfile
 def init_dict(**kwargs):
 	for key in kwargs:
-		crack_params[key] = kwargs[key]
-	return crack_params
+		default_crack_params[key] = kwargs[key]
+	return default_crack_params
 
 def gen_inputfile(crack_dict, filename):
 	f = open(filename.join('.pckl'), 'w')
@@ -131,19 +131,15 @@ class CrackCell(object):
 	
 	def calculate_c(self,size=(1,1,1)):
 		if self.symbol=='Si':
-			bulk = Diamond(directions = [self.crack_direction, self.cleavage_plane, self.crack_front],
-		  							 size = size, symbol=self.symbol, pbc=True, latticeconstant= self.a0)
-
+			at_bulk = bulk('Si', a=self.a0, cubic=True)
 		elif self.symbol=='Fe':
-			bulk = BodyCenteredCubic(directions=[self.crack_direction, self.cleavage_plane, self.crack_front],
+			at_bulk = BodyCenteredCubic(directions=[self.crack_direction, self.cleavage_plane, self.crack_front],
                                size=size, symbol='Fe', pbc=(1,1,1),
                                latticeconstant=self.a0)
-		print bulk
-		print [self.crack_direction, self.cleavage_plane, self.crack_front]
 		pot     = Potential(self.mm_init_args, param_filename=self.param_file)
-		bulk.set_calculator(pot)
-		self.cij  = pot.get_elastic_constants(bulk)
-		print self.cij.round(2)
+		at_bulk.set_calculator(pot)
+		self.cij  = pot.get_elastic_constants(at_bulk)
+		print((self.cij / units.GPa).round(2))
 		return
 
 	def build_unit_slab(self, size=(1,1,1)):
@@ -154,7 +150,7 @@ class CrackCell(object):
 			unit_slab = BodyCenteredCubic(directions=[self.crack_direction, self.cleavage_plane, self.crack_front],
                                size=size, symbol='Fe', pbc=(1,1,1),
                                latticeconstant=self.a0)
-#does this work for more than 2 atoms... no?
+# Does this work for more than 2 atoms... no?
 		print 'Number atoms in unit slab', len(unit_slab)
 		unit_slab.positions[:, 1] += (unit_slab.positions[1, 1]-unit_slab.positions[0, 1])/2.0
 		unit_slab.set_scaled_positions(unit_slab.get_scaled_positions())
@@ -171,7 +167,7 @@ class CrackCell(object):
 			unit_slab = BodyCenteredCubic(directions=[self.crack_direction, self.cleavage_plane, self.crack_front],
                                size=size, symbol='Fe', pbc=(1,1,1),
                                latticeconstant=self.a0)
-#does this work for more than 2 atoms?
+# Does this work for more than 2 atoms?
 		unit_slab.positions[:, 1] += (unit_slab.positions[1, 1]-unit_slab.positions[0, 1])/2.0
 		unit_slab.set_scaled_positions(unit_slab.get_scaled_positions())
 		surface = unit_slab.copy()

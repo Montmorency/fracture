@@ -2,7 +2,7 @@ import sys
 import os
 import shutil
 import itertools
-import crack as frac
+from fracture import crack as frac
 import pickle
 import ase.units as units
 
