@@ -38,7 +38,7 @@ default_crack_params = {
 	'tip_move_tol'      : 10.0,     # Distance tip has to move before crack
                                   # is taken to be running.
 	'strain_rate'       : 1e-5*(1.0/units.fs),
-	'traj_interval'     : 10,                 # Number of time steps between
+	'traj_interval'     : 10,                 # Number of time steps between interpolations
 	'traj_file'         : 'traj_lotf_2.xyz',  # Trajectory output file in (NetCDF format)
 	'restart_traj_file' : 'traj_lotf_2b.xyz', # Trajectory output file in (NetCDF format)
 	'print_interval'    : 20,              # time steps between trajectory prints 10 fs
@@ -47,19 +47,19 @@ default_crack_params = {
 	#'mm_init_args'      :'IP EAM_ErcolAd', # Classical potential
 	'mm_init_args'      :'IP SW', # Classical potential
 	'qm_init_args'      :'TB DFTB',       # Initialisation arguments for QM potential
-	'qm_inner_radius'   : 18.0*units.Ang, # Inner hysteretic radius for QM region
-	'qm_outer_radius'   : 21.0*units.Ang, # Outer hysteretic radius for QM region
+	'qm_inner_radius'   : 12.0*units.Ang, # Inner hysteretic radius for QM region
+	'qm_outer_radius'   : 15.0*units.Ang, # Outer hysteretic radius for QM region
 	'extrapolate_steps' : 10,      	 	    # Number of steps for predictor-corrector
   				                              # interpolation and extrapolation
 	'cleavage_plane'    : (1,-1,0),
 	'crack_front'       : (1,1,0),
 	'crack_direction'   : (0,0,1),
 	'symbol'            : 'Si',
-	'width'  : 500.0*units.Ang,        # Width of crack slab
-	'height' : 166.0*units.Ang,        # Height of crack slab
-	'vacuum' : 25.0*units.Ang,        # Amount of vacuum around slab
-	'crack_seed_length'  : 250.0*units.Ang,    # Length of seed crack
-	'strain_ramp_length' : 60.0*units.Ang,    # Distance over which strain is ramped up
+	'width'  : 500.0*units.Ang,             # Width of crack slab
+	'height' : 166.0*units.Ang,             # Height of crack slab
+	'vacuum' : 25.0*units.Ang,              # Amount of vacuum around slab
+	'crack_seed_length'  : 250.0*units.Ang, # Length of seed crack
+	'strain_ramp_length' : 50.0*units.Ang,  # Distance over which strain is ramped up
 	'initial_G'  : 4.5*(units.J/units.m**2), # Initial energy flow to crack tip
 	'relax_fmax' : 0.025*units.eV/units.Ang   # Maximum force criteria
 }
@@ -243,7 +243,9 @@ class CrackCell(object):
 
 	def write_crack_cell(self, crack_slab, mm_pot):
 		crack_pos = find_crack_tip_stress_field(crack_slab, calc=mm_pot)
-		crack_slab.info['nneightol']       = 2.46 # set nearest neighbour tolerance
+		print 'Found crack tip at position %s' % crack_pos
+		print crack_slab.get_cell()
+		crack_slab.info['nneightol']       = 1.30 # set nearest neighbour tolerance
 		crack_slab.info['LatticeConstant'] = self.a0
 		crack_slab.info['C11'] = self.cij[0, 0]
 		crack_slab.info['C12'] = self.cij[0, 1]

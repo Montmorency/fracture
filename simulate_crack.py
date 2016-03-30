@@ -20,8 +20,8 @@ qm_init_args      = 'TB DFTB'       # Initialisation arguments for QM potential
 #qm_inner_radius   = 8.0*units.Ang  # Inner hysteretic radius for QM region
 #qm_outer_radius   = 10.0*units.Ang   Inner hysteretic radius for QM region
 #Increasing for Convergence
-qm_inner_radius   = 15.0*units.Ang  # Inner hysteretic radius for QM region
-qm_outer_radius   = 18.0*units.Ang  # Inner hysteretic radius for QM region
+qm_inner_radius   = 8.0*units.Ang   # Inner hysteretic radius for QM region
+qm_outer_radius   = 10.0*units.Ang  # Inner hysteretic radius for QM region
 extrapolate_steps = 10         # Number of steps for predictor-corrector
                                # interpolation and extrapolation
 input_file  = 'crack.xyz'      # crack_slab
@@ -48,7 +48,6 @@ qm_pot = Potential(qm_init_args, param_filename='params.xml')
 restart = True
 #if from scratch we load the original cell:
 #atoms = AtomsReader('crack.xyz')
-
 #Some general procedures we use to setup crack cells (probably duplicating some stuff in crack.py):
 def fix_edges(atoms):
 	orig_height    = atoms.info['OrigHeight']
