@@ -109,7 +109,7 @@ class CrackCell(object):
 		self.cleavage_plane  = (-2, 1, 1)
 		self.crack_direction = (0, 1, -1)
 		self.crack_front     = (1,1,1)
-		self.a0              = 5.4309
+		self.a0              = 2.85
 		self.nx              = 1
 		self.ny              = 1
 #These are derived properties cell must be initialized before
@@ -183,6 +183,7 @@ class CrackCell(object):
 		self.ny = int(self.height/unit_slab.get_cell()[1,1])
 		if self.ny %2 == 1:
 			self.ny +=1
+		self.ny = 1
 		print 'number of unit cells', self.nx, self.ny
 		crack_slab = unit_slab*(self.nx, self.ny,1)
 		crack_slab.center(self.vacuum, axis=0)
@@ -275,10 +276,10 @@ if __name__ == '__main__':
 	except IOError:
 		print 'Using Defaults.'
 		crack      = CrackCell(**default_crack_params)
-	unit_slab  = crack.build_unit_slab()
+	#unit_slab  = crack.build_unit_slab()
+  unit_slab   = Atoms('frac_cell.xyz')
 	crack.calculate_c()
 	surface    = crack.build_surface()
-	print surface.get_cell()
 	E_surf = surface.get_potential_energy()
 	E_bulk = unit_slab.get_potential_energy()/len(unit_slab)
 	area = (surface.get_cell()[0,0]*surface.get_cell()[2,2])
@@ -287,12 +288,5 @@ if __name__ == '__main__':
 	print('Surface energy of %s surface %.4f J/m^2\n' %
        (crack.cleavage_plane, gamma/(units.J/units.m**2)))
 	crack_slab = crack.build_crack_cell(unit_slab)
-	mm_pot = Potential('IP SW', param_filename='params.xml', cutoff_skin=2.0)
+	mm_pot = Potential('IP EAM_ErcolAd', param_filename='Fe_Mendelev.xml', cutoff_skin=2.0)
 	crack.write_crack_cell(crack_slab, mm_pot)
-#	write('crack_slab.xyz', crack_slab)
-#	alpha, burg = crack.calc_nye_tensor(Atoms)
-#	print burg.round(4)
-#	v = view(Atoms('crack_slab.xyz'))
-#	aux_property_coloring(alpha[1,2,:])
-#	v.show()
-
