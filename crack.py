@@ -6,15 +6,15 @@ import ase.units as units
 from   ase.lattice       import bulk
 from   ase.lattice.cubic import Diamond, BodyCenteredCubic
 from   ase.constraints   import FixAtoms
+from ase.optimize         import FIRE
 
 from   quippy import set_fortran_indexing
 from   quippy.potential  import Potential, Minim
 from   quippy.elasticity import youngs_modulus, poisson_ratio, rayleigh_wave_speed, AtomResolvedStressField
 from   quippy.io    import write
-from   quippy.crack import (print_crack_system,
-                            G_to_strain,
-                            thin_strip_displacement_y,
-                            find_crack_tip_stress_field)
+from   quippy.crack import print_crack_system, G_to_strain,\
+                            thin_strip_displacement_y,\
+                            find_crack_tip_stress_field
 
 from quippy import bcc, calc_nye_tensor, Atoms, supercell
 #from qlab import view, aux_property_coloring
@@ -188,7 +188,7 @@ class CrackCell(object):
 		crack_slab = unit_slab*(self.nx, self.ny,1)
 		crack_slab.center(self.vacuum, axis=0)
 		crack_slab.center(self.vacuum, axis=1)
-		write('crack_slab_orig.xyz',crack_slab)
+		write('crack_slab_orig.xyz', crack_slab)
 		crack_slab.positions[:, 0] -= crack_slab.positions[:, 0].mean()
 		crack_slab.positions[:, 1] -= crack_slab.positions[:, 1].mean()
 		self.orig_width  = (crack_slab.positions[:, 0].max() -
@@ -212,19 +212,21 @@ class CrackCell(object):
 		self.E  = youngs_modulus(self.cij, self.cleavage_plane)
 		self.nu = poisson_ratio(self.cij, self.cleavage_plane, self.crack_direction)
 		print self.cij/units.GPa
-		print 'Rayleigh', rayleigh_wave_speed(self.cij/units.GPa, 2.3290, isotropic=True)
+		print 'Rayleigh', rayleigh_wave_speed(self.cij/units.GPa, 2.85, isotropic=True)
 		self.strain = G_to_strain(self.initial_G, self.E, self.nu, self.orig_height)
 		seed = left + self.crack_seed_length
 		tip  = left + self.crack_seed_length + self.strain_ramp_length
 		xpos = crack_slab.positions[:,0]
 		ypos = crack_slab.positions[:,1]
 		crack_slab.positions[:,1] += thin_strip_displacement_y(xpos, ypos, self.strain, seed, tip)
+		write('crack_slab_init.xyz', crack_slab)
 		print('Applied initial load: strain=%.4f, G=%.2f J/m^2' %
 	       (self.strain, self.initial_G / (units.J / units.m**2)))
 		pot      = Potential(self.mm_init_args, param_filename=self.param_file)
 		crack_slab.set_calculator(pot)
 		print('Relaxing slab...')
-		slab_opt = Minim(crack_slab, relax_positions=True, relax_cell=False)
+		#slab_opt = Minim(crack_slab, relax_positions=True, relax_cell=False)
+		slab_opt = FIRE(crack_slab) 
 		slab_opt.run(fmax=self.relax_fmax)
 		return crack_slab
 
@@ -267,26 +269,30 @@ class CrackCell(object):
 if __name__ == '__main__':
 #each job directory must have a crack_info.pckl file
 #Otherwise the defaults will be run.
-	try:
-		f          = open('crack_info.pckl', 'r')
-		crack_info = pickle.load(f)
-		print 'Initializing crack_cell from Info File.'
-		crack      = CrackCell(**crack_info)
-		f.close()
-	except IOError:
-		print 'Using Defaults.'
-		crack      = CrackCell(**default_crack_params)
+  try:
+    f          = open('crack_info.pckl', 'r')
+    crack_info = pickle.load(f)
+    print 'Initializing crack_cell from Info File.'
+    crack      = CrackCell(**crack_info)
+    f.close()
+  except IOError:
+    print 'Using Defaults.'
+    crack      = CrackCell(**default_crack_params)
 	#unit_slab  = crack.build_unit_slab()
+  mm_pot = Potential('IP EAM_ErcolAd', param_filename='Fe_Mendelev.xml', cutoff_skin=2.0)
   unit_slab   = Atoms('frac_cell.xyz')
-	crack.calculate_c()
-	surface    = crack.build_surface()
-	E_surf = surface.get_potential_energy()
-	E_bulk = unit_slab.get_potential_energy()/len(unit_slab)
-	area = (surface.get_cell()[0,0]*surface.get_cell()[2,2])
-	print E_surf, E_bulk
-	gamma = (E_surf - E_bulk*len(surface))/(2.0*area)
-	print('Surface energy of %s surface %.4f J/m^2\n' %
+  unit_slab.set_calculator(mm_pot)
+  crack.calculate_c()
+  surface    = crack.build_surface()
+  E_surf = surface.get_potential_energy()
+  bulk = bcc(2.85)
+  bulk.set_atoms(26)
+  bulk.set_calculator(mm_pot)
+  E_bulk = bulk.get_potential_energy()/len(bulk)
+  area = (surface.get_cell()[0,0]*surface.get_cell()[2,2])
+  print E_surf, E_bulk
+  gamma = (E_surf - E_bulk*len(surface))/(2.0*area)
+  print('Surface energy of %s surface %.4f J/m^2\n' %
        (crack.cleavage_plane, gamma/(units.J/units.m**2)))
-	crack_slab = crack.build_crack_cell(unit_slab)
-	mm_pot = Potential('IP EAM_ErcolAd', param_filename='Fe_Mendelev.xml', cutoff_skin=2.0)
-	crack.write_crack_cell(crack_slab, mm_pot)
+  crack_slab = crack.build_crack_cell(unit_slab)
+  crack.write_crack_cell(crack_slab, mm_pot)
