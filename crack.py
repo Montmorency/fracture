@@ -37,18 +37,18 @@ default_crack_params = {
                                   # for neighbour calculations.
 	'tip_move_tol'      : 10.0,     # Distance tip has to move before crack
                                   # is taken to be running.
-	'strain_rate'       : 1e-5*(1.0/units.fs),
+	'strain_rate'       : 1e-3*(1.0/units.fs),
 	'traj_interval'     : 10,                 # Number of time steps between interpolations
 	'traj_file'         : 'traj_lotf_2.xyz',  # Trajectory output file in (NetCDF format)
 	'restart_traj_file' : 'traj_lotf_2b.xyz', # Trajectory output file in (NetCDF format)
-	'print_interval'    : 20,              # time steps between trajectory prints 10 fs
+	'print_interval'    :  20,              # time steps between trajectory prints n fs
 	'param_file'        : 'params.xml', # Filename of XML file containing
                                          # potential parameters
 	#'mm_init_args'      :'IP EAM_ErcolAd', # Classical potential
 	'mm_init_args'      :'IP SW', # Classical potential
 	'qm_init_args'      :'TB DFTB',       # Initialisation arguments for QM potential
-	'qm_inner_radius'   : 12.0*units.Ang, # Inner hysteretic radius for QM region
-	'qm_outer_radius'   : 15.0*units.Ang, # Outer hysteretic radius for QM region
+	'qm_inner_radius'   : 18.0*units.Ang, # Inner hysteretic radius for QM region
+	'qm_outer_radius'   : 21.0*units.Ang, # Outer hysteretic radius for QM region
 	'extrapolate_steps' : 10,      	 	    # Number of steps for predictor-corrector
   				                              # interpolation and extrapolation
 	'cleavage_plane'    : (1,-1,0),
@@ -81,6 +81,7 @@ def gen_inputfile(crack_dict, filename):
 	f.close()
 	g.close()
 
+#Capturing
 class Capturing(list):
 	def __enter__(self):
 		self._stdout = sys.stdout
@@ -150,7 +151,6 @@ class CrackCell(object):
 			unit_slab = BodyCenteredCubic(directions=[self.crack_direction, self.cleavage_plane, self.crack_front],
                                size=size, symbol='Fe', pbc=(1,1,1),
                                latticeconstant=self.a0)
-# Does this work for more than 2 atoms... no?
 		print 'Number atoms in unit slab', len(unit_slab)
 		unit_slab.positions[:, 1] += (unit_slab.positions[1, 1]-unit_slab.positions[0, 1])/2.0
 		unit_slab.set_scaled_positions(unit_slab.get_scaled_positions())
@@ -194,10 +194,8 @@ class CrackCell(object):
 		               crack_slab.positions[:, 0].min())
 		self.orig_height = (crack_slab.positions[:, 1].max() -
 		               crack_slab.positions[:, 1].min())
-
 		print(('Made slab with %d atoms, original width and height: %.1f x %.1f A^2' %
        (len(crack_slab), self.orig_width, self.orig_height)))
-
 		top    = crack_slab.positions[:,1].max()
 		bottom = crack_slab.positions[:,1].min()
 		left   = crack_slab.positions[:,0].min()
@@ -212,6 +210,8 @@ class CrackCell(object):
 #to translate the initial energy flow to the tip into a strain
 		self.E  = youngs_modulus(self.cij, self.cleavage_plane)
 		self.nu = poisson_ratio(self.cij, self.cleavage_plane, self.crack_direction)
+		print self.cij/units.GPa
+		print 'Rayleigh', rayleigh_wave_speed(self.cij/units.GPa, 2.3290, isotropic=True)
 		self.strain = G_to_strain(self.initial_G, self.E, self.nu, self.orig_height)
 		seed = left + self.crack_seed_length
 		tip  = left + self.crack_seed_length + self.strain_ramp_length

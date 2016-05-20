@@ -17,11 +17,8 @@ from quippy.clusters import HYBRID_NO_MARK, HYBRID_ACTIVE_MARK
 
 #simulation parameters
 qm_init_args      = 'TB DFTB'       # Initialisation arguments for QM potential
-#qm_inner_radius   = 8.0*units.Ang  # Inner hysteretic radius for QM region
-#qm_outer_radius   = 10.0*units.Ang   Inner hysteretic radius for QM region
-#Increasing for Convergence
-qm_inner_radius   = 8.0*units.Ang   # Inner hysteretic radius for QM region
-qm_outer_radius   = 10.0*units.Ang  # Inner hysteretic radius for QM region
+qm_inner_radius   = 18.0*units.Ang   # Inner hysteretic radius for QM region
+qm_outer_radius   = 21.0*units.Ang  # Inner hysteretic radius for QM region
 extrapolate_steps = 10         # Number of steps for predictor-corrector
                                # interpolation and extrapolation
 input_file  = 'crack.xyz'      # crack_slab
@@ -32,9 +29,10 @@ cutoff_skin = 2.0*units.Ang    # Amount by which potential cutoff is increased
                                # for neighbour calculations
 tip_move_tol = 10.0            # Distance tip has to move before crack
                                # is taken to be running
-strain_rate = 1e-5*(1.0/units.fs) 
-traj_interval = 10             # Number of time steps between
-#traj_file      = 'traj_lotf_2.nc'   # Trajectory output file in (NetCDF format)
+#Need have simulate crack use the same crack dictionary so I don't need to do this by hand.
+#strain_rate = 1e-5*(1.0/units.fs) 
+strain_rate    = 1.e-5*(1.0/(7.93*units.fs))
+traj_interval  = 10             # Number of time steps between
 traj_file      = 'traj_lotf_2.xyz'    # Trajectory output file in (NetCDF format)
 restart_traj_file      = 'traj_lotf_2b.xyz'    # Trajectory output file in (NetCDF format)
 print_interval = 10            # time steps between trajectory prints 10 fs
@@ -49,6 +47,8 @@ restart = True
 #if from scratch we load the original cell:
 #atoms = AtomsReader('crack.xyz')
 #Some general procedures we use to setup crack cells (probably duplicating some stuff in crack.py):
+
+
 def fix_edges(atoms):
 	orig_height    = atoms.info['OrigHeight']
 	orig_crack_pos = atoms.info['CrackPos'].copy()

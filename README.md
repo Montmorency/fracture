@@ -9,7 +9,7 @@ Each job folder will contain a pickled dictionary object
 with the CrackCell parameters. This dictionary can be modified by hand
 or generated automatically. This initializes a crack simulation cell, and outputs
 the initial strain conditions, and the surface energy of
-the intended cleavage plane. Also generates a file 'crack.xyz'
+the intended cleavage plane, it also generates a file 'crack.xyz'
 with a relaxed initial crack_slab.
 
 simulate_crack.py contains the helper functions that are attached to
