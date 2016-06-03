@@ -37,7 +37,7 @@ default_crack_params = {
                                   # for neighbour calculations.
 	'tip_move_tol'      : 10.0,     # Distance tip has to move before crack
                                   # is taken to be running.
-	'strain_rate'       : 1e-3*(1.0/units.fs),
+	'strain_rate'       : 1e-7*(1.0/units.fs),
 	'traj_interval'     : 10,                 # Number of time steps between interpolations
 	'traj_file'         : 'traj_lotf_2.xyz',  # Trajectory output file in (NetCDF format)
 	'restart_traj_file' : 'traj_lotf_2b.xyz', # Trajectory output file in (NetCDF format)
