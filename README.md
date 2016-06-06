@@ -1,29 +1,43 @@
 #fracture
 
 `fracture` is a collection of automated workflow 
-scripts for fracture simulation. To be used in conjunction with 
-automated job generation and submission in pwsgwpy.
+scripts for fracture simulations using the
+[QUIP](https://libatoms.github.io/QUIP/quippy.html)
+package.
 
-The crack.py contains the CrackCell() object.
-Each job folder will contain a pickled dictionary object
-with the CrackCell parameters. This dictionary can be modified by hand
-or generated automatically. This initializes a crack simulation cell, and outputs
+The central object is the CrackCell() object defined in crack.py. This
+object defines the crack cell geometry, the initial energy flow to the crack
+tip, and the type of potential to be used.
+
+Each job folder needs to contain a pickled dictionary object
+with the CrackCell parameters. This dictionary can be generated using 
+make_dict.py and can be modified by hand. 
+
+This initializes a crack simulation cell, and outputs
 the initial strain conditions, and the surface energy of
 the intended cleavage plane, it also generates a file 'crack.xyz'
-with a relaxed initial crack_slab.
+with the relaxed initial crack_slab.
 
 simulate_crack.py contains the helper functions that are attached to
 an LOTFDynamics object i.e. the traj_writer, the qm/mm potentials etc.
 
 In the submission script we execute:
-
 		python run_crack.py
 
-Options can pass the script the --restart parameter if we want the
-calculation to restart from a particular trajectory file, specify the
-name of the output file with:
-		python run_crack.py --restart 'file' --output 'outputfile'
+The default start file name is 'crack.xyz' default output is 'traj_lotf_2.xyz'.
 
-The default start file name is 'crack.xyz' default output is 'traj.xyz'
+## Typical Usage
+Generate a CrackCell dictionary:
+  python make_dict.py
+
+For intergranular fracture run:
+  python gb_gen.py
+
+This will generate a relaxed unit cell of the grain boundary.
+To initiate a seed crack run:
+  python crack.py
+
+Finally we can run to begin the dynamical simulation:
+  python run_crack.py
 
 

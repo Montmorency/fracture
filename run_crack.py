@@ -36,6 +36,8 @@ traj_file    = 'traj_lotf_2b_2.xyz' # Trajectory output file in (NetCDF format)
 
 # Restart from last point in trajectory file:
 if __name__=='__main__':
+
+#Need to add an arg parser here
 	learn_on_the_fly = False
 	if learn_on_the_fly:
 		print 'Initialize Potentials'
@@ -44,8 +46,8 @@ if __name__=='__main__':
 		print 'Read last MD snapshot'
 # Default behaviour is to restart from 
 # traj file if it is present in directory
-		if path.isfile('traj_lotf_2b.xyz'):
-		   input_file = 'traj_lotf_2b.xyz'
+#		if path.isfile('traj_lotf_2b.xyz'):
+#		   input_file = 'traj_lotf_2b.xyz'
 		print 'Reading from ', input_file
 		atoms = Atoms(input_file)
 		strain_atoms = fix_edges(atoms)
