@@ -280,19 +280,14 @@ if __name__ == '__main__':
 #    crack      = CrackCell(**default_crack_params)
 # unit_slab  = crack.build_unit_slab()
   mm_pot = Potential('IP EAM_ErcolAd', param_filename='Fe_Mendelev.xml', cutoff_skin=2.0)
-
-
 # gb_frac.py will generate the frac_cell.xyz file which contains 
 # a crack_cell:
   unit_slab   = Atoms('frac_cell.xyz')
   unit_slab.set_calculator(mm_pot)
-
 #calculate the elasticity tensor:
   crack.calculate_c()
   surface    = crack.build_surface()
   E_surf = surface.get_potential_energy()
-
-
   bulk = bcc(2.85)
   bulk.set_atoms(26)
   bulk.set_calculator(mm_pot)
@@ -302,6 +297,5 @@ if __name__ == '__main__':
   gamma = (E_surf - E_bulk*len(surface))/(2.0*area)
   print('Surface energy of %s surface %.4f J/m^2\n' %
        (crack.cleavage_plane, gamma/(units.J/units.m**2)))
-
   crack_slab = crack.build_crack_cell(unit_slab)
   crack.write_crack_cell(crack_slab, mm_pot)

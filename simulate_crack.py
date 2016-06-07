@@ -48,21 +48,22 @@ restart = True
 
 
 def fix_edges(atoms):
-	orig_height    = atoms.info['OrigHeight']
-	orig_crack_pos = atoms.info['CrackPos'].copy()
-	top    = atoms.positions[:,1].max()
-	bottom = atoms.positions[:,1].min()
-	left   = atoms.positions[:,0].min()
-	right  = atoms.positions[:,0].max()
-	#fixed_mask = ((abs(atoms.positions[:, 1] - top) < 1.0) |
-  #              (abs(atoms.positions[:, 1] - bottom) < 1.0))
-	fixed_mask = ((abs(atoms.positions[:, 1] - top) < 2.0) |
+  orig_height    = atoms.info['OrigHeight']
+  orig_crack_pos = atoms.info['CrackPos'].copy()
+  print 'Original Slab Height: ', orig_height
+  print 'Original Crack Position: ', orig_crack_pos
+  print 'Is cracked? ', atoms.info['is_cracked']
+  top    = atoms.positions[:,1].max()
+  bottom = atoms.positions[:,1].min()
+  left   = atoms.positions[:,0].min()
+  right  = atoms.positions[:,0].max()
+  fixed_mask = ((abs(atoms.positions[:, 1] - top) < 2.0) |
                 (abs(atoms.positions[:, 1] - bottom) < 2.0))
-	fix_atoms  = FixAtoms(mask=fixed_mask)
-	print('Fixed %d atoms\n' % fixed_mask.sum()) # Print the number of fixed atoms
-	strain_atoms = ConstantStrainRate(orig_height, strain_rate*timestep)
-	atoms.set_constraint([fix_atoms, strain_atoms])
-	return strain_atoms
+  fix_atoms  = FixAtoms(mask=fixed_mask)
+  print('Fixed %d atoms\n' % fixed_mask.sum()) # Print the number of fixed atoms
+  strain_atoms = ConstantStrainRate(orig_height, strain_rate*timestep)
+  atoms.set_constraint([fix_atoms, strain_atoms])
+  return strain_atoms
 
 def pass_print_context(atoms, dynamics):
 	def printstatus():
