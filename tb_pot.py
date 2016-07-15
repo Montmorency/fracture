@@ -16,7 +16,7 @@ class TightBindingPot(object):
 %% const fp=0 cpl=1 xcf=4 gga=3
 %% const pureFe=0 PRBmodel=0 CModel2=0 scale=1.0
 %% const epsilon=1 sign=epsilon?-1:1 xFe=1/3
-%% const nbas=%(NBAS)d nspec=2
+%% const nbas=%(NBAS)d nspec=3
 %% const sd=1 ovlp=sd ul=1 u1=0 tbu=0 io=1 nitq=50
 %% const verb=31 so=0 nsp=2 tetra=0 metal={fp?3:1} width=0.002 N=1
 %% const au=0.529177 NdFe=6.8

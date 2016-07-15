@@ -72,8 +72,7 @@ State      Time/fs    Temp/K     Strain      G/(J/m^2)  CrackPos/A D(CrackPos)/A
 ---------------------------------------------------------------------------------"""
       log_format = ('%(label)-4s%(time)12.1f%(temperature)12.6f'+
                     '%(strain)12.5f%(G)12.4f%(crack_pos_x)12.2f    (%(d_crack_pos_x)+5.2f)')
-      log_format2 = ('%(label)-4s%(time)12.1f%(temperature)12.6f'+
-                    '%(strain)12.5f%(G)12.4f)')
+      log_format2 = ('%(label)-4s%(time)12.1f%(temperature)12.6f')
       try:
         atoms.info['label'] = dynamics.state_label                # Label for the status line
       except AttributeError:
