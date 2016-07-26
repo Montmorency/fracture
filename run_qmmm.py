@@ -7,6 +7,8 @@ import glob
 import sys
 import time
 
+import argparse
+
 sys.path.insert(0, os.getcwd())
 
 import numpy as np
@@ -87,15 +89,13 @@ def traj_writer(dynamics):
     if params.extrapolate_steps == 1 or dynamics.state == LOTFDynamics.Interpolation:
         trajectory.write(dynamics.atoms)
 
-def update_qm_region(atoms):
+def update_qm_region(atoms, dis_type='edge'):
     cut =3.
     rr = 10
-    core = fzeros(3)
     qr = 1 
     thr = 0.1
     core[:] = atoms.params['core']
-    print core[1], core[2], 'CORE'
-    fixed_mask = (np.sqrt((atoms.positions[:,0]-core[1])**2 + (atoms.positions[:,1]-core[2])**2) < rr)
+    fixed_mask = (np.sqrt((atoms.positions[:,0]-core[0])**2 + (atoms.positions[:,1]-core[1])**2) < rr)
     cl = atoms.select(mask=fixed_mask, orig_index=True) 
     print 'Number of Atoms in Cluster', cl.n
     cl.set_cutoff(cut)
@@ -106,19 +106,23 @@ def update_qm_region(atoms):
     x0.calc_connect()
     alpha = calc_nye_tensor(cl, x0, 3, 3, cl.n)    
     cl.screw = alpha[2,2,:]
-    cl.edge = alpha[2,0,:]
-    sum = 0
-    c=farray([0.,0.,0.])
+    cl.edge  = alpha[2,0,:]
+    if dis_type  == 'screw':
+      defect_pos = cl.screw
+    elif dis_type == 'edge':
+      defect_pos = cl.edge
+    total_def = 0.0
+    c = np.array([0.,0.,0.])
+    mom = [3.0 for at in range(len(atoms))]
+    atoms.set_initial_magnetic_moments(mom)
     for i in range(cl.n):
-        sum = sum + cl.edge[i]
-        c[1] = c[1] + cl.pos[1,i]*cl.edge[i]
-        c[2] = c[2] + cl.pos[2,i]*cl.edge[i]
-    c[1] = c[1]/sum
-    c[2] = c[2]/sum
-    c[3] = atoms.lattice[2,2]/2.
+        defect_pos = defect_pos   + cl.edge[i]
+        c[1] = c[1] + cl.positions[i,0]*defect_pos[i]
+        c[2] = c[2] + cl.pos[i,0]*defect_pos[i]
+    c[0] = c[0]/total_def
+    c[1] = c[1]/total_def
+    c[2] = atoms.lattice[2,2]/2.
     core[:] = c.copy()
-    core  = np.array([98.0, 98.0, 1.49]) 
-    print 'New Core', core
     old_qm_list = atoms.hybrid_vec.nonzero()[0]
     new_qm_list = update_hysteretic_qm_region(atoms, old_qm_list, core[:],
                                               params.qm_inner_radius,
@@ -140,10 +144,19 @@ if __name__=='__main__':
   if hasattr(params, 'do_timing') and params.do_timing:
     enable_timing()
 # ********** Read input file ************
-  input_file = params.input_file
+  parser = argparse.ArgumentParser()
+  parser.add_argument("-inp", "--input_file", default='')
+  parser.add_argument("-st",  "--sim_T", help='Simulation Temperature in Kelvin. Default is 300 K.', 
+                      type=float, required=True)
+  args        = parser.parse_args()
+
+  if args.input_file == '':
+    input_file = params.input_file
+  else:
+    input_file = args.input_file
+  sim_T = args.sim_T*units.kB
   print 'Loading atoms from file %s' % input_file
   atoms = read(input_file)
-  
   if params.continuation:
       # restart from last frame of most recent trajectory file
       traj_files = sorted(glob.glob('[0-9]*.traj.xyz'))
@@ -165,9 +178,8 @@ if __name__=='__main__':
   
   
   # ******* Set up potentials and calculators ********
-  
   system_timer('init_fm_pot')
-  
+  pot_file = os.path.join(params.pot_dir, params.param_file)
   mm_pot = Potential(params.mm_init_args,
                      param_filename=params.param_file,
                      cutoff_skin=params.cutoff_skin)
@@ -225,8 +237,7 @@ if __name__=='__main__':
   if params.test_mode:
       np.random.seed(0) # use same random seed each time to be deterministic 
   if params.rescale_velo:
-      MaxwellBoltzmannDistribution(atoms, 2.0*params.sim_T)
-  
+      MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)
   # Save frames to the trajectory every `traj_interval` time steps
   # but only when interpolating
   trajectory = AtomsWriter(os.path.join(params.rundir, params.traj_file))
