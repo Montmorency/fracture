@@ -29,8 +29,6 @@ from quippy.lotf import LOTFDynamics, update_hysteretic_qm_region
 sys.path+=['.']
 import params
 
-
-
 set_fortran_indexing=False
 
 try:

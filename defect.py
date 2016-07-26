@@ -3,26 +3,27 @@ import json
 import argparse
 
 import ase.units as units
-from   ase.constraints             import FixAtoms
+from   ase.optimize import FIRE
+from   ase.md.verlet import VelocityVerlet
+from   ase.constraints import FixAtoms
 from   ase.lattice.cubic import Diamond, BodyCenteredCubic
-from   ase.md.verlet               import VelocityVerlet
 from   ase.md.velocitydistribution import MaxwellBoltzmannDistribution
 
 from   quippy            import Atoms, Potential, calc_nye_tensor, set_fortran_indexing
 from   quippy.io         import AtomsReader, AtomsWriter
-from   quippy.system     import verbosity_push, PRINT_VERBOSE 
-from   quippy.crack      import thin_strip_displacement_y, G_to_strain, get_strain, strain_to_G
-from   quippy.elasticity import youngs_modulus, poisson_ratio, rayleigh_wave_speed, AtomResolvedStressField
 from   quippy.lotf       import LOTFDynamics, update_hysteretic_qm_region
+from   quippy.crack      import thin_strip_displacement_y, G_to_strain, get_strain, strain_to_G
+from   quippy.system     import verbosity_push, PRINT_VERBOSE 
 from   quippy.potential  import ForceMixingPotential, Potential
+from   quippy.elasticity import youngs_modulus, poisson_ratio, rayleigh_wave_speed, AtomResolvedStressField
 
 from simulate_crack import pass_print_context
 from tb_pot         import TightBindingPot
 
-from run_qmmm_111screw import set_quantum, update_qm_region
-
 import numpy as np
+
 import params
+from run_qmmm_111screw import set_quantum, update_qm_region
 
 set_fortran_indexing=False
 
@@ -63,54 +64,55 @@ def pp_nye_tensor(at, rr=10.0, dis_type='edge'):
 # Post Processing routine to append nye tensor information
 # to atoms object.
 # Load reference slab and calculate connectivity
-    ref_slab = Atoms('./ref_slab.xyz')
+    ref_slab   = Atoms('./ref_slab.xyz')
     at.set_cutoff(3.0)
     at.calc_connect()
     ref_slab.set_cutoff(3.0)
     ref_slab.calc_connect()
-    core     = np.zeros(3)
-#To save time it is possible to only
-#calculate the nye tensor for a 'core' region
-#determined by cutting out a cluster:
+    core       = np.zeros(3)
+# To save time it is possible to only
+# calculate the nye tensor for a 'core' region
+# determined by cutting out a cluster:
     try:
-      core       = at.info['core']
+      core   = at.info['core']
     except:
       print 'No Core info'
-      core  = np.array([98.0, 98.0, 1.49]) 
-    print core
+      core   = np.array([98.0, 98.0, 1.49]) 
+    print '\t Core: ', core
     fixed_mask = (np.sqrt((at.positions[:,0]-core[0])**2 + (at.positions[:,1]-core[1])**2) < rr)
+    at.add_property('edgex', 0.0)
+    at.add_property('edgey', 0.0)
+    at.add_property('screw', 0.0)
     cl = at.select(mask=fixed_mask, orig_index=True) 
-    print len(at)
-    print 'Size of cluster ', len(cl)
-#Append screw and edge information
-#Probably should just pass an array at this stage?
+    print '\t Size of cluster: ', len(cl)
+# Append screw and edge information
+# Probably should just pass an array at this stage?
     alpha     = calc_nye_tensor(cl, ref_slab, 3, 3, cl.n)
     cl.edgex  = alpha[2,0,:]
     cl.edgey  = alpha[2,1,:]
     cl.screw  = alpha[2,2,:]
-#Update quantum region according to the
-#position of the dislocation core:
-    if dis_type == 'screw':
+# Update quantum region according to the
+# position of the dislocation core:
+    if dis_type  == 'screw':
       defect_pos = cl.screw
     elif dis_type == 'edge':
       defect_pos = cl.edgex
-    total_def = 0.
-    c         = np.array([0.,0.,0.])
-    for i in range(cl.n):
+    total_def    = 0.
+    c            = np.array([0.,0.,0.])
+    for i in range(len(cl)):
         total_def = total_def + defect_pos[i]
-        c[0] = c[0] + cl.pos[0,i]*defect_pos[i]
-        c[1] = c[1] + cl.pos[1,i]*defect_pos[i]
+        c[0] = c[0] + cl.positions[i,0]*defect_pos[i]
+        c[1] = c[1] + cl.positions[i,1]*defect_pos[i]
     c[0] = c[0]/total_def
     c[1] = c[1]/total_def
     c[2] = cl.lattice[2,2]/2.
     core[:] = c.copy()
-#Now thread atoms back in
+# Now thread atoms back in looks like select will have indices in the fortran convention.
     for index, screw, edgex, edgey in zip(cl.orig_index, cl.screw, cl.edgex, cl.edgey):
       at.screw[index-1] = screw
       at.edgex[index-1] = edgex
       at.edgey[index-1] = edgey
     return core
-
 # Initial Parameters:
 input_file = 's111111.xyz'
 traj_file  = 's111111_traj.xyz'
@@ -132,7 +134,7 @@ if __name__=='__main__':
   parser.add_argument("-rd",  "--run_dyn", action='store_true')
   parser.add_argument("-cn",  "--calc_nye", action='store_true')
   parser.add_argument("-inp", "--input_file", required=True)
-  parser.add_argument("-dt",   "--dis_type", default='screw')
+  parser.add_argument("-dt",   "--dis_type", required=True)
   parser.add_argument("-pt",  "--pot_type", help='Potential associated with dynamics: TB or EAM', default='EAM')
   parser.add_argument("-st",  "--sim_T", help='Simulation Temperature in Kelvin. Default is 300 K.', type=float, default=300.0)
 
@@ -145,6 +147,7 @@ if __name__=='__main__':
   sim_T       = args.sim_T
 #set temperature
   sim_T       = sim_T*units.kB
+  calc_elastic_constants = False
   dyn_type = 'LOTF'
 
   print '\tDislocation Type: ',   dis_type, ' dislocation.'
@@ -180,14 +183,10 @@ if __name__=='__main__':
   pot.print_()
   screw_slab_unit.write('screw_unitcell.xyz')
   screw_slab_unit.set_calculator(pot)
-  from ase.optimize import FIRE
-  screw_slab_unit.rattle(0.01)
-  opt = FIRE(screw_slab_unit)
-  opt.run(fmax=0.01)
-  screw_slab_unit.write('screw_unitcell_H.xyz')
-  1/0
 
-  if False:
+
+#Elastic constants are disabled until we have tight binding operational.
+  if calc_elastic_constants:
     cij = pot.get_elastic_constants(screw_slab_unit)
     print 'ELASTIC CONSTANTS'
     print ((cij / units.GPa).round(2))
@@ -195,81 +194,34 @@ if __name__=='__main__':
     nu  = poisson_ratio(cij, y, x)
     print 'Youngs Modulus: ', E/units.GPa,'Poisson Ratio: ', nu
     print 'Effective elastic modulus E: ', E/(1.-nu**2)
-#Load atoms and set potential
-  print 'Loading file', '{0}.xyz'.format(input_file)
+
+  print 'Loading Structure File:', '{0}.xyz'.format(input_file)
   defect = Atoms('{0}.xyz'.format(input_file))
-# If tight-binding need to re-initialize potential
-# with new defect atoms object.
-#  if pot_type=='TB':
-#    tb.write_control_file('ctrl.fe', defect)
-#    pot = Potential('IP LMTO_TBE', param_str="""
-#    <params>
-#      <LMTO_TBE_params n_types="3" control_file="ctrl.fe">
-#        <per_type_data type="1" atomic_num="26"/>
-#        <per_type_data type="2" atomic_num="6"/>
-#        <per_type_data type="3" atomic_num="1"/>
-#      </LMTO_TBE_params>
-#    </params>""")
 
-  print 'Initializing EAM Potential'
-  POT_DIR = '/Users/lambert/pymodules/imeall/imeall/potentials'
-  eam_pot = os.path.join(POT_DIR, 'Fe_Mendelev.xml')
-  r_scale = 1.00894848312
-  mm_pot  = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot)
-
-  print 'Initializing TightBinding Potential'
-  tb              = TightBindingPot(alat= 2.87, nk=1)
-  #screw_slab_unit = Atoms('clusters.xyz')
-  tb.write_control_file('ctrl.fe', screw_slab_unit)
-  qm_pot = Potential('IP LMTO_TBE', param_str="""
-    <params>
-      <LMTO_TBE_params n_types="3" control_file="ctrl.fe">
-        <per_type_data type="1" atomic_num="26"/>
-        <per_type_data type="2" atomic_num="6"/>
-        <per_type_data type="3" atomic_num="1"/>
-      </LMTO_TBE_params>
-    </params>""")
-
-  print 'Initializing LOTF Potential, qm_radii:', params.qm_inner_radius, params.qm_outer_radius
-  qmmm_pot = ForceMixingPotential(pot1=mm_pot, pot2=qm_pot, atoms=defect,
-                               qm_args_str='single_cluster cluster_periodic_z carve_cluster '+
-                              'terminate=F cluster_hopping=F randomise_buffer=F',
-                               fit_hops=2,
-                               lotf_spring_hops=2,
-                               hysteretic_buffer=True,
-                               hysteretic_buffer_inner_radius=params.hyst_buffer_inner,
-                               hysteretic_buffer_outer_radius=params.hyst_buffer_outer,
-                               cluster_hopping_nneighb_only=False,
-                               min_images_only=True)
-
-  if dyn_type == 'LOTF':
-    defect.set_calculator(qmmm_pot)
-  else:
-    defect.set_calculator(pot)
-
-  print 'Finding initial dislocation core positions...'
-  defect.params['core']= np.array([98.0, 98.0, 1.49])
-  defect  = set_quantum(defect, params.n_core)
-  print 'done.'
   top    = defect.positions[:,1].max()
   bottom = defect.positions[:,1].min()
   left   = defect.positions[:,0].min()
   right  = defect.positions[:,0].max()
   orig_height = (defect.positions[:,1].max()-defect.positions[:,1].min())
-#  defect.info['YoungsModulus']   = E
-#  defect.info['PoissonRatio_yx'] = nu
-  defect.info['OrigHeight']      = orig_height
+
+  if calc_elastic_constants:
+    defect.info['YoungsModulus']   = E
+    defect.info['PoissonRatio_yx'] = nu
+
+  defect.info['OrigHeight']        = orig_height
   strain_atoms = fix_edges_defect(defect)
   xpos = defect.positions[:,0]
   ypos = defect.positions[:,1]
   seed = 0.0
   tip  = 0.0
+
   if False:
     strain = G_to_strain(initial_G, E, nu, orig_height)
     print 'Applied strain: ', strain*100., '%'
     defect.info['strain'] = strain
     defect.info['G']      = initial_G
     defect.positions[:,1] += thin_strip_displacement_y(xpos, ypos, strain, seed, tip)
+
   defect.set_cutoff(3.0)
   defect.calc_connect()
   
@@ -281,19 +233,74 @@ if __name__=='__main__':
   defect_object['y']        = y
   defect_object['z']        = z
   defect_object['T']        = sim_T/units.kB
-
   defect_json(**defect_object)
 
   if run_dyn:
+  # Load atoms and set potential
+  # If tight-binding need to re-initialize potential
+  # with new defect atoms object.
+  #  if pot_type=='TB':
+  #    tb.write_control_file('ctrl.fe', defect)
+  #    pot = Potential('IP LMTO_TBE', param_str="""
+  #    <params>
+  #      <LMTO_TBE_params n_types="3" control_file="ctrl.fe">
+  #        <per_type_data type="1" atomic_num="26"/>
+  #        <per_type_data type="2" atomic_num="6"/>
+  #        <per_type_data type="3" atomic_num="1"/>
+  #      </LMTO_TBE_params>
+  #    </params>""")
+    screw_slab_unit.rattle(0.01)
+    opt = FIRE(screw_slab_unit)
+    opt.run(fmax=0.01)
+    screw_slab_unit.write('screw_unitcell_H.xyz')
+
+    print 'Initializing EAM Potential'
+    POT_DIR = '/Users/lambert/pymodules/imeall/imeall/potentials'
+    eam_pot = os.path.join(POT_DIR, 'Fe_Mendelev.xml')
+    r_scale = 1.00894848312
+    mm_pot  = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot)
+  
+    print 'Initializing TightBinding Potential'
+    tb              = TightBindingPot(alat= 2.87, nk=1)
+    #screw_slab_unit = Atoms('clusters.xyz')
+    tb.write_control_file('ctrl.fe', screw_slab_unit)
+    qm_pot = Potential('IP LMTO_TBE', param_str="""
+      <params>
+        <LMTO_TBE_params n_types="3" control_file="ctrl.fe">
+          <per_type_data type="1" atomic_num="26"/>
+          <per_type_data type="2" atomic_num="6"/>
+          <per_type_data type="3" atomic_num="1"/>
+        </LMTO_TBE_params>
+      </params>""")
+    print 'Initializing LOTF Potential, qm_radii:', params.qm_inner_radius, params.qm_outer_radius
+    qmmm_pot = ForceMixingPotential(pot1=mm_pot, pot2=qm_pot, atoms=defect,
+                                 qm_args_str='single_cluster cluster_periodic_z carve_cluster '+
+                                'terminate=F cluster_hopping=F randomise_buffer=F',
+                                 fit_hops=2,
+                                 lotf_spring_hops=2,
+                                 hysteretic_buffer=True,
+                                 hysteretic_buffer_inner_radius=params.hyst_buffer_inner,
+                                 hysteretic_buffer_outer_radius=params.hyst_buffer_outer,
+                                 cluster_hopping_nneighb_only=False,
+                                 min_images_only=True)
+  
+    if dyn_type == 'LOTF':
+      defect.set_calculator(qmmm_pot)
+    else:
+      defect.set_calculator(pot)
+
+
+    print 'Finding initial dislocation core positions...'
+    defect.params['core']= np.array([98.0, 98.0, 1.49])
+    defect  = set_quantum(defect, params.n_core)
+
     MaxwellBoltzmannDistribution(defect, 2.0*sim_T)
     if dyn_type !='LOTF':
        dynamics = VelocityVerlet(defect, timestep)
        dynamics.attach(pass_print_context(defect, dynamics))
     elif dyn_type =='LOTF':
        defect.info['core']= np.array([98.0, 98.0, 1.49])
-       #update_qm_region(defect)
        print 'Initializing LOTFDynamics'
-       defect.rattle(0.01)
        verbosity_push(PRINT_VERBOSE)
        dynamics = LOTFDynamics(defect, timestep,
                                params.extrapolate_steps,
@@ -309,7 +316,7 @@ if __name__=='__main__':
 
   if calc_nye:
 #ats = AtomsReader('{0}_traj.xyz'.format(input_file))
-    ats = AtomsReader('{0}.traj.xyz'.format(input_file))
+    ats = AtomsReader('{0}.xyz'.format(input_file))
     hyb = np.zeros(ats[0].n)
 #calc_nye tensor for each configuration in the trajectory:
     print len(hyb)
@@ -317,6 +324,9 @@ if __name__=='__main__':
     print len(ats)
     traj_burg = AtomsWriter('{0}_burg.xyz'.format(input_file))
     for i, at in enumerate(ats[::1]):
+      del at.properties['edgex']
+      del at.properties['edgey']
+      del at.properties['screw']
       if i > 0:
         at.info['core'] = new_core
       new_core = pp_nye_tensor(at, dis_type=dis_type)

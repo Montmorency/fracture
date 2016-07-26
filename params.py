@@ -1,6 +1,7 @@
 import os
 import sys
 import ase.units as units
+
 try:
   from atomsserver import QUIPClient, VaspClient
   from bgqtools import (get_bootable_blocks, boot_blocks, block_corner_iter, 
