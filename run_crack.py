@@ -38,7 +38,8 @@ traj_file    = 'traj_lotf_2b_3.xyz' # Trajectory output file in (NetCDF format)
 # Restart from last point in trajectory file:
 if __name__=='__main__':
   parser = argparse.ArgumentParser()
-  parser.add_argument("-i", "--input_file",  help="File containing initial configuration. Default is crack.xyz.", default='crack.xyz')
+  parser.add_argument("-i", "--input_file",  help="File containing initial configuration. \
+                                                   Default is crack.xyz.", default='crack.xyz')
   parser.add_argument("-o", "--output_file", help="File trajectory is written to.", default='traj.xyz')
   parser.add_argument("-r", "--restart",    help="If false thermalizes atoms and fixes boundary conditions,\
                                                   frame in trajectory.", action="store_true")
