@@ -119,7 +119,7 @@ traj_file  = 's111111_traj.xyz'
 timestep   =  2.0*units.fs #Timestep (NB: time base units are not fs!)
 print_interval = 100
 initial_G      = 0.0*(units.J/units.m**2) #Initial energy flow to crack tip or strain energy of slab
-nsteps         = 5000  # Total number of timesteps to run for
+nsteps         = 500  # Total number of timesteps to run for
 
 #Create unit cell with the orientation:
 
@@ -148,7 +148,7 @@ if __name__=='__main__':
 #set temperature
   sim_T       = sim_T*units.kB
   calc_elastic_constants = False
-  dyn_type = 'LOTF'
+  dyn_type = 'eam'
 
   print '\tDislocation Type: ',   dis_type, ' dislocation.'
   print '\tCalculate Dynamics: ', run_dyn
@@ -186,7 +186,7 @@ if __name__=='__main__':
 
 
 #Elastic constants are disabled until we have tight binding operational.
-  if calc_elastic_constants:
+  if calc_elastic_constants and dyn_type != 'LOTF':
     cij = pot.get_elastic_constants(screw_slab_unit)
     print 'ELASTIC CONSTANTS'
     print ((cij / units.GPa).round(2))
@@ -204,6 +204,7 @@ if __name__=='__main__':
   right  = defect.positions[:,0].max()
   orig_height = (defect.positions[:,1].max()-defect.positions[:,1].min())
 
+#Attaching Properties to atoms object
   if calc_elastic_constants:
     defect.info['YoungsModulus']   = E
     defect.info['PoissonRatio_yx'] = nu
@@ -239,32 +240,9 @@ if __name__=='__main__':
   # Load atoms and set potential
   # If tight-binding need to re-initialize potential
   # with new defect atoms object.
-  #  if pot_type=='TB':
-  #    tb.write_control_file('ctrl.fe', defect)
-  #    pot = Potential('IP LMTO_TBE', param_str="""
-  #    <params>
-  #      <LMTO_TBE_params n_types="3" control_file="ctrl.fe">
-  #        <per_type_data type="1" atomic_num="26"/>
-  #        <per_type_data type="2" atomic_num="6"/>
-  #        <per_type_data type="3" atomic_num="1"/>
-  #      </LMTO_TBE_params>
-  #    </params>""")
-    screw_slab_unit.rattle(0.01)
-    opt = FIRE(screw_slab_unit)
-    opt.run(fmax=0.01)
-    screw_slab_unit.write('screw_unitcell_H.xyz')
-
-    print 'Initializing EAM Potential'
-    POT_DIR = '/Users/lambert/pymodules/imeall/imeall/potentials'
-    eam_pot = os.path.join(POT_DIR, 'Fe_Mendelev.xml')
-    r_scale = 1.00894848312
-    mm_pot  = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot)
-  
-    print 'Initializing TightBinding Potential'
-    tb              = TightBindingPot(alat= 2.87, nk=1)
-    #screw_slab_unit = Atoms('clusters.xyz')
-    tb.write_control_file('ctrl.fe', screw_slab_unit)
-    qm_pot = Potential('IP LMTO_TBE', param_str="""
+    if pot_type=='TB':
+      tb.write_control_file('ctrl.fe', defect)
+      pot = Potential('IP LMTO_TBE', param_str="""
       <params>
         <LMTO_TBE_params n_types="3" control_file="ctrl.fe">
           <per_type_data type="1" atomic_num="26"/>
@@ -272,8 +250,32 @@ if __name__=='__main__':
           <per_type_data type="3" atomic_num="1"/>
         </LMTO_TBE_params>
       </params>""")
-    print 'Initializing LOTF Potential, qm_radii:', params.qm_inner_radius, params.qm_outer_radius
-    qmmm_pot = ForceMixingPotential(pot1=mm_pot, pot2=qm_pot, atoms=defect,
+
+      screw_slab_unit.rattle(0.01)
+      opt = FIRE(screw_slab_unit)
+      opt.run(fmax=0.01)
+      screw_slab_unit.write('screw_unitcell_H.xyz')
+
+      print 'Initializing EAM Potential'
+      POT_DIR = '/Users/lambert/pymodules/imeall/imeall/potentials'
+      eam_pot = os.path.join(POT_DIR, 'Fe_Mendelev.xml')
+      r_scale = 1.00894848312
+      mm_pot  = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot)
+  
+      print 'Initializing TightBinding Potential'
+      tb              = TightBindingPot(alat= 2.87, nk=1)
+    #screw_slab_unit = Atoms('clusters.xyz')
+      tb.write_control_file('ctrl.fe', screw_slab_unit)
+      qm_pot = Potential('IP LMTO_TBE', param_str="""
+      <params>
+        <LMTO_TBE_params n_types="3" control_file="ctrl.fe">
+          <per_type_data type="1" atomic_num="26"/>
+          <per_type_data type="2" atomic_num="6"/>
+          <per_type_data type="3" atomic_num="1"/>
+        </LMTO_TBE_params>
+      </params>""")
+      print 'Initializing LOTF Potential, qm_radii:', params.qm_inner_radius, params.qm_outer_radius
+      qmmm_pot = ForceMixingPotential(pot1=mm_pot, pot2=qm_pot, atoms=defect,
                                  qm_args_str='single_cluster cluster_periodic_z carve_cluster '+
                                 'terminate=F cluster_hopping=F randomise_buffer=F',
                                  fit_hops=2,
@@ -283,19 +285,26 @@ if __name__=='__main__':
                                  hysteretic_buffer_outer_radius=params.hyst_buffer_outer,
                                  cluster_hopping_nneighb_only=False,
                                  min_images_only=True)
-  
-    if dyn_type == 'LOTF':
       defect.set_calculator(qmmm_pot)
-    else:
+    elif pot_type == 'EAM':
+      print 'Initializing EAM Potential'
+      POT_DIR = '/Users/lambert/pymodules/imeall/imeall/potentials'
+      eam_pot = os.path.join(POT_DIR, 'Fe_Mendelev.xml')
+      r_scale = 1.00894848312
+      pot  = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot)
       defect.set_calculator(pot)
-
+    else:
+      print 'No potential chosen', 1/0
 
     print 'Finding initial dislocation core positions...'
-    defect.params['core']= np.array([98.0, 98.0, 1.49])
-    defect  = set_quantum(defect, params.n_core)
+    try:
+      defect.params['core']
+    except KeyError:
+      defect.params['core'] = np.array([98.0, 98.0, 1.49])
 
+    defect  = set_quantum(defect, params.n_core)
     MaxwellBoltzmannDistribution(defect, 2.0*sim_T)
-    if dyn_type !='LOTF':
+    if dyn_type =='eam':
        dynamics = VelocityVerlet(defect, timestep)
        dynamics.attach(pass_print_context(defect, dynamics))
     elif dyn_type =='LOTF':
@@ -307,11 +316,19 @@ if __name__=='__main__':
                                check_force_error=False)
        dynamics.set_qm_update_func(update_qm_region)
        dynamics.attach(pass_print_context(defect, dynamics))
+       dynamics.attach(traj_writer, print_interval, defect)
+    else:
+      print 'No dyn_type chosen', 1/0
     
     trajectory = AtomsWriter('{0}.traj.xyz'.format(input_file))
-    dynamics.attach(traj_writer, print_interval, defect)
     print 'Running Crack Simulation'
     dynamics.run(nsteps)
+#Write cooked i.e. thermalized ceel to file.
+    defect.set_cutoff(3.0)
+    defect.calc_connect()
+    new_core = pp_nye_tensor(defect, dis_type=dis_type)
+    defect.info['core']= new_core
+    defect.write('{0}_therm.xyz'.format(input_file))
     print 'Crack Simulation Finished'
 
   if calc_nye:

@@ -83,7 +83,10 @@ State      Time/fs    Temp/K     Strain      G/(J/m^2)  CrackPos/A D(CrackPos)/A
       atoms.info['temperature'] = (atoms.get_kinetic_energy() /
                                    (1.5*units.kB*len(atoms)))
       atoms.info['strain'] = get_strain(atoms)
-      atoms.info['G']      = get_energy_release_rate(atoms)/(units.J/units.m**2)
+      try:
+        atoms.info['G']      = get_energy_release_rate(atoms)/(units.J/units.m**2)
+      except:
+        atoms.info['G']      = 0.0
       try:
         orig_crack_pos = atoms.info['CrackPos'].copy()
         crack_pos = find_crack_tip_stress_field(atoms, calc=sw_pot)
