@@ -1,6 +1,7 @@
 import os
 import sys
 import ase.units as units
+from quippy import set_fortran_indexing
 
 try:
   from atomsserver import QUIPClient, VaspClient
@@ -11,6 +12,7 @@ except:
   print 'No Bluegene tools'
   BGQAVAIL = False
 
+set_fortran_indexing=False
 test_mode = len(sys.argv[1:]) > 0 and sys.argv[1] == '-t'
 # ******* Start of parameters ***********
 
@@ -70,7 +72,6 @@ cluster_args = dict(single_cluster=False,
 #               kpts=[1, 1, 7], kpar=4, lreal='auto', ibrion=13, nsw=1000000, nelmdl=-15, ispin=2,
 #               nelm=100, algo='VeryFast', npar=32, lplane=False, lwave=False, lcharg=False, istart=0,
 #               voskown=1, ismear=1, sigma=0.1, isym=0) # possibly try iwavpr=12, should be faster if it works
-
 #HL check if magnetic moments work equally well.
 vasp_args=dict(xc='PBE', amix=0.01, amin=0.001, bmix=0.001, amix_mag=0.01, bmix_mag=0.001, 
                kpts=[1, 1, 7], kpar=4, lreal='auto', ibrion=13, nsw=1000000, nelmdl=-15, ispin=2,

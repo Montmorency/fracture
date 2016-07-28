@@ -134,7 +134,7 @@ if __name__=='__main__':
   parser.add_argument("-rd",  "--run_dyn", action='store_true')
   parser.add_argument("-cn",  "--calc_nye", action='store_true')
   parser.add_argument("-inp", "--input_file", required=True)
-  parser.add_argument("-dt",   "--dis_type", required=True)
+  parser.add_argument("-dt",  "--dis_type", required=True)
   parser.add_argument("-pt",  "--pot_type", help='Potential associated with dynamics: TB or EAM', default='EAM')
   parser.add_argument("-st",  "--sim_T", help='Simulation Temperature in Kelvin. Default is 300 K.', type=float, default=300.0)
 
