@@ -16,7 +16,7 @@ test_mode = len(sys.argv[1:]) > 0 and sys.argv[1] == '-t'
 
 input_file     = 'e111112.xyz'     # starting configuration
 reference_file = 'ref_slab.xyz' # Reference file for Nye tensor
-continuation = True             # If true, restart form last frame of most recent *.traj.xyz file
+continuation = False             # If true, restart form last frame of most recent *.traj.xyz file
 classical    = False             # If true, do classical MD instead of QM/MM
 sim_T        = 300.0*units.kB    # Simulation temperature
 rescale_velo = False             # Rescale velocities to 2*sim_T  
@@ -26,6 +26,7 @@ cutoff_skin  = 2.0*units.Ang     # Amount by which potential cutoff is increased
 traj_file = '%s.traj.xyz'        # Trajectory output file
 #traj_interval = 10              # Number of time steps between
                                  # writing output frames
+pot_dir      = '/home/lambert/pymodules/fracture/potentials'
 param_file   = 'Fe_Mendelev.xml'   # Filename of XML file containing
                                  # potential parameters
 mm_init_args = 'IP EAM_ErcolAd'  # Initialisation arguments for
@@ -34,8 +35,8 @@ mm_init_args = 'IP EAM_ErcolAd'  # Initialisation arguments for
 # additional parameters for the QM/MM simulation:
 qm_inner_radius   = 3.0*units.Ang # Inner hysteretic radius for QM region
 qm_outer_radius   = 5.0*units.Ang # Outer hysteretic radius for QM region
-hyst_buffer_inner = 4.0 # Inner hysteretic radius for QM region
-hyst_buffer_outer = 6.0 # Outer hysteretic radius for QM region
+hyst_buffer_inner = 7.0 # Inner hysteretic radius for QM region
+hyst_buffer_outer = 9.0 # Outer hysteretic radius for QM region
 extrapolate_steps = 5   # Number of steps for predictor-corrector
                         # interpolation and extrapolation
 traj_interval = extrapolate_steps
@@ -80,7 +81,7 @@ n_core = 1 # number of quantum regions
 
 # Blue Gene specific parameters
 acct = 'SiO2_Fracture'
-runtime = 360
+runtime = 60
 queue = 'default'
 n_qm_jobs = n_core
 njobs = n_qm_jobs
