@@ -119,7 +119,7 @@ traj_file  = 's111111_traj.xyz'
 timestep   =  2.0*units.fs #Timestep (NB: time base units are not fs!)
 print_interval = 100
 initial_G      = 0.0*(units.J/units.m**2) #Initial energy flow to crack tip or strain energy of slab
-nsteps         = 200  # Total number of timesteps to run for
+nsteps         = 500  # Total number of timesteps to run for
 
 #Create unit cell with the orientation:
 
