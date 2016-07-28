@@ -192,9 +192,9 @@ class CrackCell(object):
     #self.ny = 1
     print 'number of unit cells', self.nx, self.ny
     crack_slab = unit_slab*(self.nx, self.ny,1)
+    write('ref_slab.xyz', crack_slab)
     crack_slab.center(self.vacuum, axis=0)
     crack_slab.center(self.vacuum, axis=1)
-    write('crack_slab_orig.xyz', crack_slab)
     crack_slab.positions[:, 0] -= crack_slab.positions[:, 0].mean()
     crack_slab.positions[:, 1] -= crack_slab.positions[:, 1].mean()
     self.orig_width  = (crack_slab.positions[:, 0].max() -
