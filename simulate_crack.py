@@ -63,9 +63,8 @@ def fix_edges(atoms):
   atoms.set_constraint([fix_atoms, strain_atoms])
   return strain_atoms
 
-def pass_print_context(atoms, dynamics):
+def pass_print_context(atoms, dynamics, mm_pot):
   def printstatus():
-    #if dynamics.nsteps == 1:
     if (dynamics.nsteps%10)==0:
       print """
 State      Time/fs    Temp/K     Strain      G/(J/m^2)  CrackPos/A D(CrackPos)/A 
@@ -89,7 +88,7 @@ State      Time/fs    Temp/K     Strain      G/(J/m^2)  CrackPos/A D(CrackPos)/A
         atoms.info['G']      = 0.0
       try:
         orig_crack_pos = atoms.info['CrackPos'].copy()
-        crack_pos = find_crack_tip_stress_field(atoms, calc=sw_pot)
+        crack_pos = find_crack_tip_stress_field(atoms, calc=mm_pot)
         atoms.info['crack_pos_x']   = crack_pos[0]
         atoms.info['d_crack_pos_x'] = crack_pos[0] - orig_crack_pos[0]
         print log_format % atoms.info
@@ -119,23 +118,22 @@ def set_qmmm_pot(atoms, crack_pos):
 
 def pass_trajectory_context(trajectory, dynamics):
   def traj_writer(dynamics):
-    if dynamics.state == LOTFDynamics.Interpolation:
       trajectory.write(dynamics.atoms)
   return traj_writer
 
 # Prevents Strain from being incremented behind the crack tip
-def check_if_cracked_context(strain_atoms):
+def check_if_cracked_context(strain_atoms,mm_pot):
   def check_if_cracked(atoms):
     orig_crack_pos = atoms.info['CrackPos'].copy()
-    crack_pos = find_crack_tip_stress_field(atoms, calc=sw_pot)
+    crack_pos = find_crack_tip_stress_field(atoms, calc=mm_pot)
     if not atoms.info['is_cracked'] and (crack_pos[0] - orig_crack_pos[0]) > tip_move_tol:
       atoms.info['is_cracked'] = True
       del atoms.constraints[atoms.constraints.index(strain_atoms)]
   return check_if_cracked
 
-def update_qm_region_context(qmmm_pot, atoms):
+def update_qm_region_context(qmmm_pot, mm_pot, atoms):
   def update_qm_region(atoms):
-    crack_pos = find_crack_tip_stress_field(atoms, calc=sw_pot)
+    crack_pos = find_crack_tip_stress_field(atoms, calc=mm_pot)
     qm_list   = qmmm_pot.get_qm_atoms()
     qm_list   = update_hysteretic_qm_region(atoms, qm_list, crack_pos, qm_inner_radius, 
                                             qm_outer_radius, update_marks=True)
