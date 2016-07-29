@@ -21,7 +21,6 @@ import ase.units as units
 
 from quippy.atoms  import Atoms
 from quippy.io     import AtomsWriter
-from quippy.farray import fzeros, frange, unravel_index, farray
 from quippy import set_fortran_indexing, calc_nye_tensor 
 from quippy.system import verbosity_push, PRINT_VERBOSE, enable_timing, system_timer
 
@@ -61,11 +60,10 @@ def set_quantum(x, n_quantum):
     x.add_property('hybrid_1', 0)
     x.add_property('hybrid_mark_1', 0)
     core = x.params['core']
-    for j in frange(1, x.n):
-        if (x.diff_min_image(core,j)[0]**2 + x.diff_min_image(core,j)[1]**2)**0.5 < 5.0 :
-            x.hybrid_vec[j-1] = 1
-            x.hybrid[j-1] = 1
-
+    for j in range(len(x)):
+        if (x.diff_min_image(core,j)[1]**2 + x.diff_min_image(core,j)[2]**2)**0.5 < 5.0 :
+            x.hybrid_vec[j] = 1
+            x.hybrid[j]     = 1
     x.hybrid_1[:] = x.hybrid_vec[:]  
     x.params['core'] = core[:]
     return x
@@ -139,22 +137,26 @@ def update_qm_region(atoms, dis_type='edge'):
     return 
 
 if __name__=='__main__':
+
   if hasattr(params, 'do_verbose') and params.do_verbose:
     verbosity_push(PRINT_VERBOSE)
   if hasattr(params, 'do_timing') and params.do_timing:
     enable_timing()
 # ********** Read input file ************
   parser = argparse.ArgumentParser()
-  parser.add_argument("-inp", "--input_file", default='')
+  parser.add_argument("-ct","--calc_type", default="crack")
+  parser.add_argument("-inp", "--input_file", required=True)
   parser.add_argument("-st",  "--sim_T", help='Simulation Temperature in Kelvin. Default is 300 K.', 
                       type=float, required=True)
   args        = parser.parse_args()
 
+#parse args string:
   if args.input_file == '':
     input_file = params.input_file
   else:
     input_file = args.input_file
   sim_T = args.sim_T*units.kB
+
   print 'Loading atoms from file %s' % input_file
   atoms = read(input_file)
   if params.continuation:
