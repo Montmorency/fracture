@@ -12,7 +12,7 @@ except:
   print 'No Bluegene tools'
   BGQAVAIL = False
 
-set_fortran_indexing=False
+set_fortran_indexing(False)
 test_mode = len(sys.argv[1:]) > 0 and sys.argv[1] == '-t'
 # ******* Start of parameters ***********
 
@@ -30,6 +30,7 @@ traj_file = '%s.traj.xyz'        # Trajectory output file
                                  # writing output frames
 pot_dir      = '/home/lambert/pymodules/fracture/potentials'
 param_file   = 'Fe_Mendelev.xml'   # Filename of XML file containing
+param_file   = os.path.join(pot_dir, param_file)
                                  # potential parameters
 mm_init_args = 'IP EAM_ErcolAd'  # Initialisation arguments for
                                  # classical potential
@@ -90,7 +91,7 @@ njobs = n_qm_jobs
 #qm_exe = '/home/fbianchi/vasp5/vasp.5.3.new/vasp.bgq'
 qm_exe = '/projects/SiO2_Fracture/iron/vasp.bgq'
 #qm_exe = '/home/fbianchi/project/exe/vasp5.O3.cplx.sock'
-qm_npj = 512
+qm_npj = 64
 qm_ppn = 1
 
 nodes = qm_npj*njobs

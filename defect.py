@@ -25,7 +25,7 @@ import numpy as np
 import params
 from run_qmmm_111screw import set_quantum, update_qm_region
 
-set_fortran_indexing=False
+set_fortran_indexing(False)
 
 def traj_writer(dynamics):
   if params.extrapolate_steps == 1 or dynamics.state == LOTFDynamics.Interpolation:
