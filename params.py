@@ -2,12 +2,12 @@ import os
 import sys
 import ase.units as units
 from quippy import set_fortran_indexing
-
-try:
-  from atomsserver import QUIPClient, VaspClient
-  from bgqtools import (get_bootable_blocks, boot_blocks, block_corner_iter, 
+from matscipy.socketcalc  import  VaspClient, SocketCalculator
+from bgqtools import (get_bootable_blocks, boot_blocks, block_corner_iter, 
                         get_hostname_ip, get_cobalt_info, set_unbuffered_stdout)
-  BGQAVAIL = True
+BGQAVAIL = True
+try:
+  pass
 except:
   print 'No Bluegene tools'
   BGQAVAIL = False
@@ -47,7 +47,7 @@ check_force_error = False         # Do QM calc at each step to check pred/corr. 
 nsteps = 1000
 
 save_clusters = False  # if True, write each QM cluster to .xyz files
-force_restart = True  # if True, force VASP to restart for each QM cluster
+force_restart = True   # if True, force VASP to restart for each QM cluster
 
 traj_index = 1
 traj_file = '%d.traj.xyz' % traj_index
@@ -89,13 +89,14 @@ n_qm_jobs = n_core
 njobs = n_qm_jobs
 
 #qm_exe = '/home/fbianchi/vasp5/vasp.5.3.new/vasp.bgq'
-qm_exe = '/projects/SiO2_Fracture/iron/vasp.bgq'
 #qm_exe = '/home/fbianchi/project/exe/vasp5.O3.cplx.sock'
-qm_npj = 64
+qm_exe = '/projects/SiO2_Fracture/iron/vasp.bgq'
+qm_npj = 128
 qm_ppn = 1
 
 nodes = qm_npj*njobs
 rundir = os.getcwd()
+print 'Current Working Directory', rundir
 qm_env = {'OMP_NUM_THREAD': 1}
 
 # ***** Setup clients and server *******
@@ -118,10 +119,11 @@ if BGQAVAIL and not test_mode:
 
     qm_subblocks = [(i, bcs) for (i, bcs) in enumerate(block_corner_iter(blocks, qm_npj)) ]
     print 'qm_subblocks', qm_subblocks
-
-    qm_clients = [VaspClient(client_id, qm_exe, qm_env, qm_npj, qm_ppn, block, corner, shape, jobname, 
-                             **vasp_args) for client_id, (block, corner, shape) in qm_subblocks ]
-
+    #vasp_clients = [VaspClient(client_id, qm_exe, qm_env, qm_npj, qm_ppn, block, corner, shape, jobname, 
+    #                           **vasp_args) for client_id, (block, corner, shape) in qm_subblocks]
+    #qm_clients   = [SocketCalculator(client) for client in vasp_clients]
+    qm_clients = [SocketCalculator(VaspClient(client_id, qm_exe, qm_env, qm_npj, qm_ppn, block, corner, shape, jobname, 
+                               **vasp_args)) for client_id, (block, corner, shape) in qm_subblocks]
 else:
     qm_clients = []
     hostname, ip = '<dummy>', 0

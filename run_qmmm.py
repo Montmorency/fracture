@@ -37,13 +37,8 @@ import params
 
 set_fortran_indexing(False)
 
-try:
-  if not params.classical:
-    from atomsserver import QUIPClient, VaspClient
-    from distribfm import DistributedForceMixingPotential
-except:
-  print 'No BGQ'
-
+if not params.classical:
+  from distribfm            import DistributedForceMixingPotential
 def log_pred_corr_errors(dynamics, logfile):
     logline = '%s err %10.1f%12.6f%12.6f\n' % (dynamics.state_label,
                                                dynamics.get_time()/units.fs,
@@ -52,9 +47,8 @@ def log_pred_corr_errors(dynamics, logfile):
     print logline
     logfile.write(logline)
 
-def set_quantum_disloc(x, n_quantum):
+def set_quantum_disloc(x):
     # parameters for the simulation
-    qr = 1       # number of quantum regions per zone
     mom = [3.0 for at in range(len(x))]
     x.set_initial_magnetic_moments(mom)
     # add properties
@@ -251,7 +245,7 @@ if __name__=='__main__':
   if not params.continuation and not params.classical:
       print 'Finding initial Quantum Core positions...'
       if geom =='disloc':
-        atoms  = set_quantum_disloc(atoms, params.n_core)
+        atoms  = set_quantum_disloc(atoms)
       elif geom=='crack':
         mom   = [3.0 for at in range(len(atoms))]
         atoms.set_initial_magnetic_moments(mom)
@@ -295,7 +289,7 @@ if __name__=='__main__':
                               check_force_error=check_force_error)
   system_timer('init_dynamics')
   
-  # Function to update the QM region at the beginning of each extrapolation cycle   
+#Function to update the QM region at the beginning of each extrapolation cycle   
   if not check_force_error:
       if params.extrapolate_steps == 1:
           if not params.classical:
