@@ -72,6 +72,8 @@ if __name__=='__main__':
 #Otherwise it will recover temperature from the previous run.
     if not restart: 
       print 'Thermalizing atoms'
+      #Use same random seed so that simulations are deterministic
+      np.random.seed(42)
       MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)
     print 'Initializing Dynamics'
     dynamics = LOTFDynamics(atoms, timestep, extrapolate_steps)

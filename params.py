@@ -2,9 +2,14 @@ import os
 import sys
 import ase.units as units
 from quippy import set_fortran_indexing
+
 from matscipy.socketcalc  import  VaspClient, SocketCalculator
+#from atomsserver import QUIPClient, VaspClient
+
 from bgqtools import (get_bootable_blocks, boot_blocks, block_corner_iter, 
                         get_hostname_ip, get_cobalt_info, set_unbuffered_stdout)
+
+set_fortran_indexing(False)
 BGQAVAIL = True
 try:
   pass
@@ -12,7 +17,6 @@ except:
   print 'No Bluegene tools'
   BGQAVAIL = False
 
-set_fortran_indexing(False)
 test_mode = len(sys.argv[1:]) > 0 and sys.argv[1] == '-t'
 # ******* Start of parameters ***********
 
@@ -25,7 +29,7 @@ rescale_velo = False             # Rescale velocities to 2*sim_T
 timestep     = 2.0*units.fs      # Timestep (NB: time base units are not fs!)
 cutoff_skin  = 2.0*units.Ang     # Amount by which potential cutoff is increased
                                  # for neighbour calculations
-traj_file = '%s.traj.xyz'        # Trajectory output file
+traj_file    = '%s.traj.xyz'        # Trajectory output file
 #traj_interval = 10              # Number of time steps between
                                  # writing output frames
 pot_dir      = '/home/lambert/pymodules/fracture/potentials'
@@ -74,8 +78,8 @@ cluster_args = dict(single_cluster=False,
 #               nelm=100, algo='VeryFast', npar=32, lplane=False, lwave=False, lcharg=False, istart=0,
 #               voskown=1, ismear=1, sigma=0.1, isym=0) # possibly try iwavpr=12, should be faster if it works
 #HL check if magnetic moments work equally well.
-vasp_args=dict(xc='PBE', amix=0.01, amin=0.001, bmix=0.001, amix_mag=0.01, bmix_mag=0.001, 
-               kpts=[1, 1, 7], kpar=4, lreal='auto', ibrion=13, nsw=1000000, nelmdl=-15, ispin=2,
+vasp_args=dict(parmode='cobalt', xc='PBE', amix=0.01, amin=0.001, bmix=0.001, amix_mag=0.01, bmix_mag=0.001, 
+               kpts=[1, 1, 8], kpar=4, lreal='auto', ibrion=13, nsw=1000000, nelmdl=-15, ispin=2,
                nelm=100, algo='VeryFast', npar=32, lplane=False, lwave=False, lcharg=False, istart=0,
                voskown=1, ismear=1, sigma=0.1, isym=0) # possibly try iwavpr=12, should be faster if it works
 
@@ -83,7 +87,7 @@ n_core = 1 # number of quantum regions
 
 # Blue Gene specific parameters
 acct = 'SiO2_Fracture'
-runtime = 60
+runtime = 360
 queue = 'default'
 n_qm_jobs = n_core
 njobs = n_qm_jobs
@@ -91,13 +95,14 @@ njobs = n_qm_jobs
 #qm_exe = '/home/fbianchi/vasp5/vasp.5.3.new/vasp.bgq'
 #qm_exe = '/home/fbianchi/project/exe/vasp5.O3.cplx.sock'
 qm_exe = '/projects/SiO2_Fracture/iron/vasp.bgq'
-qm_npj = 128
-qm_ppn = 1
+qm_npj = 512
+qm_ppn = 2
 
 nodes = qm_npj*njobs
 rundir = os.getcwd()
 print 'Current Working Directory', rundir
-qm_env = {'OMP_NUM_THREAD': 1}
+#qm_env = {'OMP_NUM_THREAD': '1'}
+qm_env = None
 
 # ***** Setup clients and server *******
 if BGQAVAIL and not test_mode:
@@ -107,6 +112,7 @@ if BGQAVAIL and not test_mode:
         jobname = '%s.%s' % (job_name, os.path.splitext(os.path.basename(sys.argv[0]))[0])
     except KeyError:
         # Not running under cobalt, so let's qsub ourselves
+        print 'NOT RUNNING COBALT'
         qsub_args = 'qsub -A %s -n %d -t %d -q %s --mode script --disable_preboot %s' % \
             (acct, nodes, runtime, queue, ' '.join(sys.argv))
         print qsub_args
@@ -119,11 +125,8 @@ if BGQAVAIL and not test_mode:
 
     qm_subblocks = [(i, bcs) for (i, bcs) in enumerate(block_corner_iter(blocks, qm_npj)) ]
     print 'qm_subblocks', qm_subblocks
-    #vasp_clients = [VaspClient(client_id, qm_exe, qm_env, qm_npj, qm_ppn, block, corner, shape, jobname, 
-    #                           **vasp_args) for client_id, (block, corner, shape) in qm_subblocks]
-    #qm_clients   = [SocketCalculator(client) for client in vasp_clients]
-    qm_clients = [SocketCalculator(VaspClient(client_id, qm_exe, qm_env, qm_npj, qm_ppn, block, corner, shape, jobname, 
-                               **vasp_args)) for client_id, (block, corner, shape) in qm_subblocks]
+    qm_clients = [VaspClient(client_id, qm_exe, qm_env, qm_npj, qm_ppn, block, corner, shape, jobname, 
+                            **vasp_args) for client_id, (block, corner, shape) in qm_subblocks]
 else:
     qm_clients = []
     hostname, ip = '<dummy>', 0
@@ -135,5 +138,4 @@ print 'QM MPI tasks per node: %r' % qm_ppn
 print 'Number of QM jobs: %d' % n_qm_jobs
 print 'Total number of sub-block jobs: %d' % njobs
 print 'Total number of nodes: %d' % nodes
-
 # ******* End of parameters *************

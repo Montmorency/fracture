@@ -13,7 +13,6 @@ sys.path.insert(0, os.getcwd())
 
 import numpy as np
 
-from ase.io import read
 from ase.constraints import FixAtoms
 from ase.md.verlet import VelocityVerlet
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
@@ -39,6 +38,7 @@ set_fortran_indexing(False)
 
 if not params.classical:
   from distribfm            import DistributedForceMixingPotential
+
 def log_pred_corr_errors(dynamics, logfile):
     logline = '%s err %10.1f%12.6f%12.6f\n' % (dynamics.state_label,
                                                dynamics.get_time()/units.fs,
@@ -134,7 +134,7 @@ def update_qm_region(atoms, dis_type='edge'):
     atoms.params['core'] = core[:]
     return 
 
-def update_qm_region_crack(atoms, mm_pot):
+def update_qm_region_crack(atoms):
   mm_pot = Potential(params.mm_init_args,
                      param_filename=params.param_file,
                      cutoff_skin=params.cutoff_skin)
@@ -176,7 +176,8 @@ if __name__=='__main__':
   geom = args.geom
 
   print 'Loading atoms from file %s' % input_file
-  atoms = read(input_file)
+  atoms = Atoms(input_file)
+  atoms = Atoms(atoms)
   if params.continuation:
       # restart from last frame of most recent trajectory file
       traj_files = sorted(glob.glob('[0-9]*.traj.xyz'))
@@ -186,8 +187,7 @@ if __name__=='__main__':
   
   # loading reference configuration for Nye tensor evaluation
   # convert to quippy Atoms - FIXME in long term, this should not be necesary
-  x0 = read(params.reference_file)
-  atoms = Atoms(atoms)
+  x0 = Atoms(params.reference_file)
   x0 = Atoms(x0)
   x0.set_cutoff(3.0)
   x0.calc_connect()
@@ -253,16 +253,20 @@ if __name__=='__main__':
         atoms.add_property('hybrid_vec', 0, overwrite=True)
         atoms.add_property('hybrid_1', 0)
         atoms.add_property('hybrid_mark_1', 0)
-        crack_pos = atoms.info['CrackPos']
-        new_qm_list = update_hysteretic_qm_region(atoms, [], crack_pos, params.qm_inner_radius,
-                                              params.qm_outer_radius,
-                                              update_marks=False)
-        atoms.hybrid[new_qm_list] = 1
-        atoms.hybrid_1[new_qm_list] = 1
-        atoms.params['core'] = crack_pos
+        crackpos = atoms.info['CrackPos']
+        qm_list_old = []
+        qm_list   = update_hysteretic_qm_region(atoms, [], crackpos, params.qm_inner_radius,
+                                                params.qm_outer_radius,
+                                                update_marks=False)
+        atoms.hybrid[qm_list]     = HYBRID_ACTIVE_MARK
+        atoms.hybrid_vec[qm_list] = HYBRID_ACTIVE_MARK
+        atoms.hybrid_1[qm_list]   = HYBRID_ACTIVE_MARK
+        atoms.hybrid_mark_1[qm_list] = HYBRID_ACTIVE_MARK
+        atoms.params['core'] = crackpos
+        print HYBRID_ACTIVE_MARK
+        print 'Core Found. No. Quantum Atoms:', sum(atoms.hybrid[:])
       else:
-        print 'Something wrong', 1/0 
-      print 'done.'
+        print 'No cell geometry given, specifiy either disloc or crack', 1/0 
   
   # ********* Setup and run MD ***********
   # Set the initial temperature to 2*simT: it will then equilibriate to
@@ -284,11 +288,11 @@ if __name__=='__main__':
           qmmm_pot.set(calc_weights=True)
       dynamics.state_label = 'D'
   else:
-      dynamics = LOTFDynamics(atoms, params.timestep,
-                              params.extrapolate_steps,
-                              check_force_error=check_force_error)
+    print 'Initializing LOTF Dynamics'
+    dynamics = LOTFDynamics(atoms, params.timestep,
+                            params.extrapolate_steps,
+                            check_force_error=check_force_error)
   system_timer('init_dynamics')
-  
 #Function to update the QM region at the beginning of each extrapolation cycle   
   if not check_force_error:
       if params.extrapolate_steps == 1:
@@ -297,6 +301,7 @@ if __name__=='__main__':
       else:
       # choose appropriate update function for defects or crack.
       # or grainboundary.
+        print 'Setting Update Function'
         if geom =='disloc':
           dynamics.set_qm_update_func(update_qm_region)
         elif geom =='crack':
@@ -309,7 +314,7 @@ if __name__=='__main__':
       dynamics.attach(log_pred_corr_errors, 1, dynamics, pred_corr_logfile)
      
   dynamics.attach(traj_writer, params.traj_interval, dynamics)
-  print 'Cutoff of atoms is', dynamics.atoms.cutoff, 'A'
+  print 'Cutoff of atoms is ', dynamics.atoms.cutoff, 'A'
   dynamics.attach(printstatus)
   # Start running!
   system_timer('dynamics_run')
