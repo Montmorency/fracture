@@ -16,7 +16,7 @@ from quippy.clusters import HYBRID_NO_MARK, HYBRID_ACTIVE_MARK
 
 #simulation parameters
 qm_init_args      = 'TB DFTB'       # Initialisation arguments for QM potential
-qm_inner_radius   = 18.0*units.Ang   # Inner hysteretic radius for QM region
+qm_inner_radius   = 18.0*units.Ang  # Inner hysteretic radius for QM region
 qm_outer_radius   = 21.0*units.Ang  # Inner hysteretic radius for QM region
 extrapolate_steps = 10         # Number of steps for predictor-corrector
                                # interpolation and extrapolation
@@ -30,10 +30,10 @@ tip_move_tol = 10.0            # Distance tip has to move before crack
                                # is taken to be running
 #Need have simulate crack use the same crack dictionary so I don't need to do this by hand.
 #strain_rate = 1e-5*(1.0/units.fs) 
-strain_rate    = 1.e-5*(1.0/(7.93*units.fs))
-traj_interval  = 10             # Number of time steps between
-traj_file      = 'traj_lotf_2.xyz'    # Trajectory output file in (NetCDF format)
-restart_traj_file      = 'traj_lotf_2b.xyz'    # Trajectory output file in (NetCDF format)
+strain_rate        = 0.0
+traj_interval      = 10             # Number of time steps between
+traj_file          = 'traj_lotf_2.xyz'    # Trajectory output file in (NetCDF format)
+restart_traj_file  = 'traj_lotf_2b.xyz'    # Trajectory output file in (NetCDF format)
 print_interval = 10            # time steps between trajectory prints 10 fs
 param_file = 'params.xml'      # Filename of XML file containing
                                # potential parameters
