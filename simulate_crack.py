@@ -8,11 +8,10 @@ from quippy import Atoms
 from quippy.potential import Potential
 from quippy.io import AtomsWriter, AtomsReader
 from quippy.crack import(get_strain, get_energy_release_rate,
-                         ConstantStrainRate,
-                         find_crack_tip_stress_field)
+                         ConstantStrainRate, find_crack_tip_stress_field)
 from quippy import set_fortran_indexing
-from quippy.potential import ForceMixingPotential
 from quippy.lotf import LOTFDynamics, update_hysteretic_qm_region
+from quippy.potential import ForceMixingPotential
 from quippy.clusters import HYBRID_NO_MARK, HYBRID_ACTIVE_MARK
 
 #simulation parameters
@@ -46,7 +45,6 @@ restart = True
 #if from scratch we load the original cell:
 #atoms = AtomsReader('crack.xyz')
 #Some general procedures we use to setup crack cells (probably duplicating some stuff in crack.py):
-
 
 def fix_edges(atoms):
   orig_height    = atoms.info['OrigHeight']
