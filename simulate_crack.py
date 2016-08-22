@@ -143,6 +143,7 @@ def update_qm_region_context(qmmm_pot, mm_pot, atoms):
 
 if __name__=='__main__':
 #Randomize initial positions
+  np.random.seed()
   MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)
 #dynamics = VelocityVerlet(atoms, timestep)
   dynamics = LOTFDynamics(atoms, timestep, extrapolate_steps)
