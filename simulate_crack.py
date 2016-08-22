@@ -30,8 +30,7 @@ cutoff_skin = 2.0*units.Ang    # Amount by which potential cutoff is increased
 tip_move_tol = 10.0            # Distance tip has to move before crack
                                # is taken to be running
 #Need have simulate crack use the same crack dictionary so I don't need to do this by hand.
-#strain_rate = 1e-5*(1.0/units.fs) 
-strain_rate    = 1.e-5*(1.0/(7.93*units.fs))
+strain_rate    = 0.0
 traj_interval  = 10             # Number of time steps between
 traj_file      = 'traj_lotf_2.xyz'    # Trajectory output file in (NetCDF format)
 restart_traj_file      = 'traj_lotf_2b.xyz'    # Trajectory output file in (NetCDF format)
@@ -145,6 +144,7 @@ def update_qm_region_context(qmmm_pot, mm_pot, atoms):
 
 if __name__=='__main__':
 #Randomize initial positions
+  np.random.seed()
   MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)
 #dynamics = VelocityVerlet(atoms, timestep)
   dynamics = LOTFDynamics(atoms, timestep, extrapolate_steps)

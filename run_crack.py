@@ -25,7 +25,8 @@ cutoff_skin = 2.0*units.Ang    # Amount by which potential cutoff is increased
                                # for neighbour calculations
 tip_move_tol = 12.0            # Distance tip has to move before crack
                                # is taken to be running
-strain_rate    = 0.0*(1.0/units.fs) 
+#strain_rate    = 0.0*(1.0/units.fs)
+strain_rate    = 0.0
 traj_interval  = 5             # Number of time steps between interpolations
 print_interval = 10             # time steps between trajectory prints 10 fs
 param_file     = 'params.xml'   # Filename of XML file containing
@@ -34,8 +35,9 @@ mm_init_args = 'IP EAM_ErcolAd' # Classical potential
 qm_init_args = 'TB DFTB'        # Initialisation arguments for QM potential
 input_file   = 'crack.xyz'      # crack_slab
 traj_file    = 'crack_traj.xyz' # Trajectory output file in (NetCDF format)
-pot_dir      = '/Users/lambert/pymodules/imeall/imeall/potentials'
-pot_file     = os.path.join(pot_dir, 'Fe_Mendelev.xml')
+pot_dir      = '/users/k1511981/pymodules/imeall/imeall/potentials'
+#pot_file     = os.path.join(pot_dir, 'Fe_Mendelev.xml')
+pot_file     = os.path.join(pot_dir, 'PotBH.xml')
 
 # Restart from last point in trajectory file:
 if __name__=='__main__':
@@ -43,8 +45,9 @@ if __name__=='__main__':
   parser.add_argument("-i", "--input_file",  help="File containing initial configuration. \
                                                    Default is crack.xyz.", default='crack.xyz')
   parser.add_argument("-o", "--output_file", help="File trajectory is written to.", default='crack_traj.xyz')
-  parser.add_argument("-r", "--restart",    help="If false thermalizes atoms and fixes boundary conditions,\
-                                                  frame in trajectory.", default=False)
+  parser.add_argument("-p", "--pot_file",    help="Potential is set.", default=os.path.join(pot_dir,'PotBH.xml'))
+  parser.add_argument("-r", "--restart",     help="If false thermalizes atoms and fixes boundary conditions,\
+                                                   frame in trajectory.", default=False)
   args = parser.parse_args()
   print args.input_file
   restart = args.restart
@@ -52,9 +55,11 @@ if __name__=='__main__':
   if restart:
     print 'Restarting job'
   input_file = args.input_file
+  pot_file   = args.pot_file
   if args.output_file:
     traj_file = args.output_file
   print 'Output_file: ', traj_file
+  print 'POT FILE', pot_file
 #Need to add an arg parser here
   learn_on_the_fly = False
   if learn_on_the_fly:
