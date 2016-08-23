@@ -4,18 +4,16 @@ import ase.units as units
 from quippy import set_fortran_indexing
 
 from matscipy.socketcalc  import  VaspClient, SocketCalculator
-#from atomsserver import QUIPClient, VaspClient
 
-from bgqtools import (get_bootable_blocks, boot_blocks, block_corner_iter, 
-                        get_hostname_ip, get_cobalt_info, set_unbuffered_stdout)
-
-set_fortran_indexing(False)
-BGQAVAIL = True
 try:
-  pass
+  from bgqtools import (get_bootable_blocks, boot_blocks, block_corner_iter, 
+                        get_hostname_ip, get_cobalt_info, set_unbuffered_stdout)
+  BGQAVAIL = True
 except:
   print 'No Bluegene tools'
   BGQAVAIL = False
+
+set_fortran_indexing(False)
 
 test_mode = len(sys.argv[1:]) > 0 and sys.argv[1] == '-t'
 # ******* Start of parameters ***********
