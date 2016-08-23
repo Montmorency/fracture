@@ -85,7 +85,7 @@ n_core = 1 # number of quantum regions
 
 # Blue Gene specific parameters
 acct = 'SiO2_Fracture'
-runtime = 360
+runtime = 60
 queue = 'default'
 n_qm_jobs = n_core
 njobs = n_qm_jobs
@@ -93,8 +93,8 @@ njobs = n_qm_jobs
 #qm_exe = '/home/fbianchi/vasp5/vasp.5.3.new/vasp.bgq'
 #qm_exe = '/home/fbianchi/project/exe/vasp5.O3.cplx.sock'
 qm_exe = '/projects/SiO2_Fracture/iron/vasp.bgq'
-qm_npj = 512
-qm_ppn = 2
+qm_npj = 128
+qm_ppn = 4
 
 nodes = qm_npj*njobs
 rundir = os.getcwd()
