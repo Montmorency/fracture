@@ -4,11 +4,15 @@ import pickle
 
 import ase.units as units
 from   ase.lattice       import bulk
-from   ase.optimize      import FIRE
 from   ase.constraints   import FixAtoms
 from   ase.lattice.cubic import Diamond, BodyCenteredCubic
+from   ase.optimize      import FIRE
+#from   ase.optimize      import LBFGS
+#preconditioned LBFGS is !much! faster for the crack slab
+#relaxations tested so far.
+from   ase.optimize.precon  import LBFGS
 
-from   quippy import set_fortran_indexing
+from   quippy            import set_fortran_indexing
 from   quippy.potential  import Potential, Minim
 from   quippy.elasticity import youngs_modulus, poisson_ratio, rayleigh_wave_speed, AtomResolvedStressField
 from   quippy.io    import write
@@ -234,7 +238,8 @@ class CrackCell(object):
     crack_slab.set_calculator(pot)
     print('Relaxing slab...')
     #slab_opt = Minim(crack_slab, relax_positions=True, relax_cell=False)
-    slab_opt = FIRE(crack_slab) 
+    #slab_opt = FIRE(crack_slab) 
+    slab_opt = LBFGS(crack_slab)
     slab_opt.run(fmax=self.relax_fmax)
     return crack_slab
 

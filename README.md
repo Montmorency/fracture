@@ -29,10 +29,11 @@ Generate a CrackCell dictionary:
 For intergranular fracture run:
   python gb_gen.py
 
-To initiate a seed from the crack_dictionary:
+To initiate a seed crack from the crack_dictionary
+run from the directory where the make_dict.pckl 
+file is located:
   python crack.py
 
 To begin the dynamical simulation:
   python run_crack.py
-
 

@@ -17,8 +17,8 @@ from   quippy.system     import verbosity_push, PRINT_VERBOSE
 from   quippy.potential  import ForceMixingPotential, Potential
 from   quippy.elasticity import youngs_modulus, poisson_ratio, rayleigh_wave_speed, AtomResolvedStressField
 
-from simulate_crack import pass_print_context
-from tb_pot         import TightBindingPot
+from   simulate_crack import pass_print_context
+from   tb_pot         import TightBindingPot
 
 import numpy as np
 
@@ -33,7 +33,7 @@ def traj_writer(dynamics):
 
 # Function to identify the core region: 
 def fix_edges_defect(atoms, strain_at=False):
-  orig_height    = atoms.info['OrigHeight']
+  orig_height  = atoms.info['OrigHeight']
   top    = atoms.positions[:,1].max()
   bottom = atoms.positions[:,1].min()
   left   = atoms.positions[:,0].min()
@@ -60,7 +60,7 @@ def defect_json(**json_args):
   with open('defect.json','w') as f:
     json.dump(j_object, f, indent=2)
 
-def pp_nye_tensor(at, rr=10.0, dis_type='edge'):
+def pp_nye_tensor(at, rr=15.0, dis_type='edge'):
 # Post Processing routine to append nye tensor information
 # to atoms object.
 # Load reference slab and calculate connectivity
@@ -73,16 +73,26 @@ def pp_nye_tensor(at, rr=10.0, dis_type='edge'):
 # To save time it is possible to only
 # calculate the nye tensor for a 'core' region
 # determined by cutting out a cluster:
-    try:
-      core   = at.info['core']
-    except:
-      print 'No Core info'
-      core   = np.array([98.0, 98.0, 1.49]) 
-    print '\t Core: ', core
+    if dis_type in ['edge','screw']:
+      try:
+        core   = at.info['core']
+      except:
+        sys.exit('No Core Info')
+      print '\t Core Position: ', core
+    elif dis_type == 'crack':
+      core   = at.info['CrackPos']
+      print '\t Crack Position: ', core
+
     fixed_mask = (np.sqrt((at.positions[:,0]-core[0])**2 + (at.positions[:,1]-core[1])**2) < rr)
-    at.add_property('edgex', 0.0)
-    at.add_property('edgey', 0.0)
-    at.add_property('screw', 0.0)
+
+    if dis_type in ['edge','screw']:
+      at.add_property('edgex', 0.0)
+      at.add_property('edgey', 0.0)
+      at.add_property('screw', 0.0)
+#Going to append full nye tensor to the crack tip:
+    elif dis_type == 'crack':
+      at.add_property('nye', 0.0, n_cols=9, overwrite=True)
+
     cl = at.select(mask=fixed_mask, orig_index=True) 
     print '\t Size of cluster: ', len(cl)
 # Append screw and edge information
@@ -93,26 +103,32 @@ def pp_nye_tensor(at, rr=10.0, dis_type='edge'):
     cl.screw  = alpha[2,2,:]
 # Update quantum region according to the
 # position of the dislocation core:
-    if dis_type  == 'screw':
-      defect_pos = cl.screw
-    elif dis_type == 'edge':
-      defect_pos = cl.edgex
-    total_def    = 0.
-    c            = np.array([0.,0.,0.])
-    for i in range(len(cl)):
+    if dis_type in ['edge', 'screw']:
+      if dis_type  == 'screw':
+        defect_pos = cl.screw
+      elif dis_type == 'edge':
+        defect_pos = cl.edgex
+      total_def    = 0.
+      c            = np.array([0.,0.,0.])
+      for i in range(len(cl)):
         total_def = total_def + defect_pos[i]
         c[0] = c[0] + cl.positions[i,0]*defect_pos[i]
         c[1] = c[1] + cl.positions[i,1]*defect_pos[i]
-    c[0] = c[0]/total_def
-    c[1] = c[1]/total_def
-    c[2] = cl.lattice[2,2]/2.
-    core[:] = c.copy()
+      c[0] = c[0]/total_def
+      c[1] = c[1]/total_def
+      c[2] = cl.lattice[2,2]/2.
+      core[:] = c.copy()
+    if dis_type in ['edge', 'screw']:
+      for index, screw, edgex, edgey in zip(cl.orig_index, cl.screw, cl.edgex, cl.edgey):
 # Now thread atoms back in looks like select will have indices in the fortran convention.
-    for index, screw, edgex, edgey in zip(cl.orig_index, cl.screw, cl.edgex, cl.edgey):
-      at.screw[index-1] = screw
-      at.edgex[index-1] = edgex
-      at.edgey[index-1] = edgey
+        at.screw[index-1] = screw
+        at.edgex[index-1] = edgex
+        at.edgey[index-1] = edgey
+    elif dis_type == 'crack':
+      for orig_index, index in zip(cl.orig_index, range(len(cl))):
+        at.nye[:, orig_index-1] = alpha[:,:,index].T.reshape(9)
     return core
+
 # Initial Parameters:
 input_file = 's111111.xyz'
 traj_file  = 's111111_traj.xyz'
@@ -120,7 +136,6 @@ timestep   =  2.0*units.fs #Timestep (NB: time base units are not fs!)
 print_interval = 100
 initial_G      = 0.0*(units.J/units.m**2) #Initial energy flow to crack tip or strain energy of slab
 nsteps         = 500  # Total number of timesteps to run for
-
 #Create unit cell with the orientation:
 
 x = [1,1,-2]
@@ -131,12 +146,13 @@ screw_slab_unit = BodyCenteredCubic(directions = [x, y, z], size=(1,1,1),
 if __name__=='__main__':
 #Parse Arguments:
   parser = argparse.ArgumentParser()
-  parser.add_argument("-rd",  "--run_dyn", action='store_true')
-  parser.add_argument("-cn",  "--calc_nye", action='store_true')
-  parser.add_argument("-inp", "--input_file", required=True)
-  parser.add_argument("-dt",  "--dis_type", required=True)
-  parser.add_argument("-pt",  "--pot_type", help='Potential associated with dynamics: TB or EAM', default='EAM')
-  parser.add_argument("-st",  "--sim_T", help='Simulation Temperature in Kelvin. Default is 300 K.', type=float, default=300.0)
+  parser.add_argument("-rd",  "--run_dyn",    help="Performs a relaxation", action='store_true')
+  parser.add_argument("-cn",  "--calc_nye",   help="Calculate nye tensor",  action='store_true')
+  parser.add_argument("-inp", "--input_file", help="name of input file with no suffix", required=True)
+  parser.add_argument("-dt",  "--dis_type",   help= "Can be 'edge' or 'screw'", required=True)
+  parser.add_argument("-pt",  "--pot_type",   help='Potential associated with dynamics: TB or EAM', default='EAM')
+  parser.add_argument("-f",  "--steps", type=int,  help='Number of steps in trajectory to sample for burgers vectors.', default=5)
+  parser.add_argument("-st",  "--sim_T",  help='Simulation Temperature in Kelvin. Default is 300 K.', type=float, default=300.0)
 
   args        = parser.parse_args()
   run_dyn     = args.run_dyn
@@ -145,6 +161,7 @@ if __name__=='__main__':
   dis_type    = args.dis_type
   pot_type    = args.pot_type
   sim_T       = args.sim_T
+  sampling    = args.steps
 #set temperature
   sim_T       = sim_T*units.kB
   calc_elastic_constants = False
@@ -157,8 +174,9 @@ if __name__=='__main__':
   print '\tPotential: ',  pot_type
 
   if pot_type == 'EAM':
-    POT_DIR  = '/Users/lambert/pymodules/imeall/imeall/potentials'
-    eam_pot  = os.path.join(POT_DIR, 'Fe_Mendelev.xml')
+    global potdir
+    potdir   = os.environ['POTDIR']
+    eam_pot  = os.path.join(potdir, 'PotBH.xml')
     r_scale  = 1.00894848312
     pot      = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot)
   elif pot_type == 'TB':
@@ -178,13 +196,10 @@ if __name__=='__main__':
         <per_type_data type="2" atomic_num="1"/>
       </LMTO_TBE_params>
     </params>""")
-
 #If there is an initial strain energy increment that here:
   pot.print_()
   screw_slab_unit.write('screw_unitcell.xyz')
   screw_slab_unit.set_calculator(pot)
-
-
 #Elastic constants are disabled until we have tight binding operational.
   if calc_elastic_constants and dyn_type != 'LOTF':
     cij = pot.get_elastic_constants(screw_slab_unit)
@@ -194,7 +209,6 @@ if __name__=='__main__':
     nu  = poisson_ratio(cij, y, x)
     print 'Youngs Modulus: ', E/units.GPa,'Poisson Ratio: ', nu
     print 'Effective elastic modulus E: ', E/(1.-nu**2)
-
   print 'Loading Structure File:', '{0}.xyz'.format(input_file)
   defect = Atoms('{0}.xyz'.format(input_file))
 
@@ -257,8 +271,8 @@ if __name__=='__main__':
       screw_slab_unit.write('screw_unitcell_H.xyz')
 
       print 'Initializing EAM Potential'
-      POT_DIR = '/Users/lambert/pymodules/imeall/imeall/potentials'
-      eam_pot = os.path.join(POT_DIR, 'Fe_Mendelev.xml')
+      potdir = '/Users/lambert/pymodules/imeall/imeall/potentials'
+      eam_pot = os.path.join(potdir, 'Fe_Mendelev.xml')
       r_scale = 1.00894848312
       mm_pot  = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot)
   
@@ -287,9 +301,7 @@ if __name__=='__main__':
                                  min_images_only=True)
       defect.set_calculator(qmmm_pot)
     elif pot_type == 'EAM':
-      print 'Initializing EAM Potential'
-      POT_DIR = '/Users/lambert/pymodules/imeall/imeall/potentials'
-      eam_pot = os.path.join(POT_DIR, 'Fe_Mendelev.xml')
+      eam_pot = os.path.join(potdir, 'Fe_Mendelev.xml')
       r_scale = 1.00894848312
       pot  = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot)
       defect.set_calculator(pot)
@@ -340,10 +352,14 @@ if __name__=='__main__':
     print ats[0].params
     print len(ats)
     traj_burg = AtomsWriter('{0}_burg.xyz'.format(input_file))
-    for i, at in enumerate(ats[::1]):
-      del at.properties['edgex']
-      del at.properties['edgey']
-      del at.properties['screw']
+    for i, at in enumerate(ats[::sampling]):
+      try:
+        del at.properties['edgex']
+        del at.properties['edgey']
+        del at.properties['screw']
+      except KeyError:
+#property doesn't exist on atoms object
+        pass
       if i > 0:
         at.info['core'] = new_core
       new_core = pp_nye_tensor(at, dis_type=dis_type)
