@@ -56,7 +56,6 @@ class DistributedForceMixingPotential(ForceMixingPotential):
         print 'Clients', clients
         if len(clients) > 0:
             self.server = AtomsServerAsync((ip, port), AtomsRequestHandler, clients, bgq=True)
-            print 'BGQ', self.server.bgq
             self.server_thread = threading.Thread(target=self.server.serve_forever)
             self.server_thread.daemon = True
             self.server_thread.start()
@@ -212,7 +211,9 @@ class DistributedForceMixingPotential(ForceMixingPotential):
                 mask = getattr(r, mark_name) == HYBRID_ACTIVE_MARK
                 #print 'Cluster %d: QM forces on atoms %s' % (i, r.index[mask])
                 #print r.force[:, mask].T
-                at.qm_force[:, list(r.index[mask])] = r.force[:, mask]
+        # HL if set_fortran is false we need to reduce the index here because
+        # the atoms object is expecting python indexing.
+                at.qm_force[:, [ind-1 for ind in list(r.index[mask])]] = r.force[:, mask]
 
         system_timer('process_results')
 

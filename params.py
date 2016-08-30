@@ -26,14 +26,18 @@ continuation = False             # If true, restart form last frame of most rece
 classical    = False             # If true, do classical MD instead of QM/MM
 sim_T        = 300.0*units.kB    # Simulation temperature
 rescale_velo = False             # Rescale velocities to 2*sim_T  
-timestep     = 2.0*units.fs      # Timestep (NB: time base units are not fs!)
+timestep     = 1.0*units.fs      # Timestep (NB: time base units are not fs!)
 cutoff_skin  = 2.0*units.Ang     # Amount by which potential cutoff is increased
                                  # for neighbour calculations
 traj_file    = '%s.traj.xyz'        # Trajectory output file
 #traj_interval = 10              # Number of time steps between
                                  # writing output frames
-pot_dir      = '/home/lambert/pymodules/fracture/potentials'
-param_file   = 'Fe_Mendelev.xml'   # Filename of XML file containing
+try:
+  pot_dir      = os.environ['POTDIR']
+except:
+  sys.exit("POTDIR variable not set in bash environment.")
+
+param_file   = 'PotBH.xml'   # Filename of XML file containing
 param_file   = os.path.join(pot_dir, param_file)
                                  # potential parameters
 mm_init_args = 'IP EAM_ErcolAd'  # Initialisation arguments for
@@ -46,7 +50,7 @@ hyst_buffer_inner = 7.0 # Inner hysteretic radius for QM region
 hyst_buffer_outer = 9.0 # Outer hysteretic radius for QM region
 extrapolate_steps = 5   # Number of steps for predictor-corrector
                         # interpolation and extrapolation
-traj_interval = extrapolate_steps
+traj_interval     = extrapolate_steps # Only print the DFT steps
 check_force_error = False         # Do QM calc at each step to check pred/corr. err
 nsteps = 1000
 
@@ -95,7 +99,7 @@ njobs = n_qm_jobs
 #qm_exe = '/home/fbianchi/vasp5/vasp.5.3.new/vasp.bgq'
 #qm_exe = '/home/fbianchi/project/exe/vasp5.O3.cplx.sock'
 qm_exe = '/projects/SiO2_Fracture/iron/vasp.bgq'
-qm_npj = 128
+qm_npj = 256
 qm_ppn = 4
 
 nodes = qm_npj*njobs

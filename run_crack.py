@@ -35,8 +35,11 @@ mm_init_args = 'IP EAM_ErcolAd' # Classical potential
 qm_init_args = 'TB DFTB'        # Initialisation arguments for QM potential
 input_file   = 'crack.xyz'      # crack_slab
 traj_file    = 'crack_traj.xyz' # Trajectory output file in (NetCDF format)
-pot_dir      = '/users/k1511981/pymodules/imeall/imeall/potentials'
-#pot_file     = os.path.join(pot_dir, 'Fe_Mendelev.xml')
+try:
+  pot_dir      = os.environ['POTDIR']
+except:
+  sys.exit("PLEASE SET export POTDIR='path/to/potfiles/'"
+
 pot_file     = os.path.join(pot_dir, 'PotBH.xml')
 
 # Restart from last point in trajectory file:

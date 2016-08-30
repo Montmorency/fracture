@@ -160,20 +160,23 @@ if __name__=='__main__':
     verbosity_push(PRINT_VERBOSE)
   if hasattr(params, 'do_timing') and params.do_timing:
     enable_timing()
-# ********** Read input file ************
+# ********** Read input file ************ #
   parser = argparse.ArgumentParser()
   parser.add_argument("-g","--geom", default='crack')
   parser.add_argument("-inp", "--input_file", required=True)
-  parser.add_argument("-st",  "--sim_T", help='Simulation Temperature in Kelvin. Default is 300 K.', 
-                      type=float, required=True)
+  parser.add_argument("-st",  "--sim_T", help='Simulation Temperature in Kelvin. Default is 300 K.', type=float, required=True)
+  parser.add_argument("-cfe", "--check_force_error", help='Perform a DFT calculation at each step in the trajectory.', action='store_true')
+
   args        = parser.parse_args()
-#parse args string:
+# parse args string:
   if args.input_file == '':
     input_file = params.input_file
   else:
     input_file = args.input_file
-  sim_T = args.sim_T*units.kB
-  geom = args.geom
+# ParseArguements
+  sim_T             = args.sim_T*units.kB
+  geom              = args.geom
+  check_force_error = args.check_force_error
 
   print 'Loading atoms from file %s' % input_file
   atoms = Atoms(input_file)
@@ -280,7 +283,6 @@ if __name__=='__main__':
   trajectory = AtomsWriter(os.path.join(params.rundir, params.traj_file))
   # Initialise the dynamical system
   system_timer('init_dynamics')
-  check_force_error = params.check_force_error
   if params.extrapolate_steps == 1:
       dynamics = VelocityVerlet(atoms, params.timestep)
       check_force_error = False
