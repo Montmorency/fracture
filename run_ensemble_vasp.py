@@ -1,45 +1,36 @@
 #!/usr/bin/env python
+
 import logging
-logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 
 import os
 import sys
-import glob
-import socket
-import shutil
-import argparse
 import subprocess
+import socket
+import glob
 
 from bgqtools import (get_bootable_blocks, boot_blocks, block_corner_iter,
                       set_unbuffered_stdout)
 
 set_unbuffered_stdout()
 
-
-parser = argparse.ArgumentParser()
-
-parser.add_argument("-npj", "--npj",  type=int,  default = 64)
-parser.add_argument("-ppn", "--ppn",  type=int,  default =  4)
-parser.add_argument("-t",   "--time", type=int,  default = 60)
-parser.add_argument("-jp",  "--jobpattern",      default = 'T3*')
-
-args = parser.parse_args()
-
 acct  = 'SiO2_Fracture'
-time  = 60
+time  = 720
 queue = 'default'
 mapping = 'ABCDET'
 scratch = os.getcwd()
-vasp    = '/projects/SiO2_Fracture/iron/vasp.bgq'
+#vasp = '/home/kermode/exe/vasp.O3.cplx'
+vasp  = '/projects/SiO2_Fracture/iron/vasp.bgq'
 envargs = '--envs RUNJOB_MAPPING=%s --envs MPIRUN_ENABLE_TTY_REPORTING=0' % mapping
-npj     = 64 # nodes per job
-ppn     = 4 # MPI tasks per node
+npj = 512 # nodes per job
+ppn = 4 # MPI tasks per node
 
 hostname = socket.gethostname()
 print 'Hostname: %s' % hostname
 
-jobdirs = glob.glob('T3*')[4:6]
+#jobdirs = glob.glob('vasp-ref-???')
 
+jobdirs = glob.glob('b*shift*')
 print 'jobdirs = %s' % jobdirs
 
 njobs = len(jobdirs)
@@ -52,9 +43,11 @@ if 'COBALT_PARTSIZE' not in os.environ:
     os.system(qsub_args)
     sys.exit(1)
 
-partsize  = int(os.environ['COBALT_PARTSIZE'])
+partsize = int(os.environ['COBALT_PARTSIZE'])
 partition = os.environ['COBALT_PARTNAME']
-jobid     = int(os.environ['COBALT_JOBID'])
+jobid = int(os.environ['COBALT_JOBID'])
+
+assert nodes == partsize
 
 print 'Nodes per job: %d' % npj
 print 'MPI tasks per node: %d' % ppn
@@ -69,22 +62,21 @@ boot_blocks(blocks)
 # start sub-block jobs with background runjob helper processes
 jobs = []
 logs = []
-print jobdirs
 for job, (block, corner, shape) in zip(jobdirs, block_corner_iter(blocks, npj)):
-    print 'JOBDIR and BCS', job, (block, corner, shape)
-    shutil.copy(os.path.join('/home/lambert/pymodules/fracture', 'run_qmmm_e.py'), os.path.join(scratch,job))
+    print job, (block, corner, shape)
     os.chdir(os.path.join(scratch, job))
     log = open('%d.vasp.stdout' % jobid, 'w')
-# We pass lots of arguments to the run_qmmm script that tell it what to do
-# sim temperature, check force error etc.
-# and where (i.e. which block corner shape) to do it.
-    physargs    = '-st {0} -cfe'.format(300)
-    locargs     = '--block {0} --corner {1} --shape {2}'.format(block, corner, shape)
-    nodeargs    = '--npj {0} --ppn {1}'.format(npj, ppn)
-    runjob_args = ('python run_qmmm_e.py {physargs} {locargs} {nodeargs} '.format(physargs=physargs, locargs=locargs, nodeargs=nodeargs)).split()
+
+    locargs = '--block %s --corner %s --shape %s' % (block, corner, shape)
+    runjob_args = ('runjob %s -n %d -p %d %s : %s' % (locargs, npj*ppn, ppn, envargs, vasp)).split()
+    print ' '.join(runjob_args)
+    print
+
     jobs.append(subprocess.Popen(runjob_args, stdout=log))
     logs.append(log)
+    
 # wait for all background jobs to finish, then flush their logs
 for (job, log) in zip(jobs, logs):
     job.wait()
     log.flush()
+

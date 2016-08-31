@@ -325,7 +325,6 @@ if __name__=='__main__':
   
   if check_force_error:
       pred_corr_logfile.close()
-  
 # Shutdown clients and cleanup server
   if not params.classical:
     qmmm_pot.server.shutdown()

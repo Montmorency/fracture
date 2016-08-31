@@ -1,5 +1,4 @@
 #fracture
-
 `fracture` is a collection of automated workflow 
 scripts for fracture simulations using the
 [QUIP](https://libatoms.github.io/QUIP/quippy.html)
@@ -19,21 +18,22 @@ the intended cleavage plane, it also generates a file 'crack.xyz'
 with the relaxed initial crack_slab.
 
 simulate_crack.py contains the helper functions that are attached to
-an LOTFDynamics object i.e. the traj_writer, the qm/mm potentials etc.
+a LOTFDynamics object i.e. the traj_writer, the qm/mm potentials etc.
 The default start file name is 'crack.xyz' default output is 'traj_lotf_2.xyz'.
 
 ## Typical Usage
-Generate a CrackCell dictionary:
-  python make_dict.py
+Generate a CrackCell dictionary in the working directory 
+which determines the crack geometry and other simulation 
+parameters by modifying make_dict.py:
+  `python make_dict.py`
 
-For intergranular fracture run:
-  python gb_gen.py
+For fracture simulations involving grain boundaries run:
+  `python gb_gen.py`
 
-To initiate a seed crack from the crack_dictionary
-run from the directory where the make_dict.pckl 
-file is located:
-  python crack.py
+To relax the initial seed crack from the crack_dictionary
+run from the working directory:
+  `python crack.py`
 
 To begin the dynamical simulation:
-  python run_crack.py
+  `python run_crack.py`
 

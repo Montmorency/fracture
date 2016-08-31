@@ -13,10 +13,10 @@ sys.path.insert(0, os.getcwd())
 
 import numpy as np
 
-from ase.constraints import FixAtoms
-from ase.md.verlet import VelocityVerlet
-from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
 import ase.units as units
+from   ase.constraints import FixAtoms
+from   ase.md.verlet import VelocityVerlet
+from   ase.md.velocitydistribution import MaxwellBoltzmannDistribution
 
 from quippy           import set_fortran_indexing, calc_nye_tensor 
 from quippy.io        import AtomsWriter
@@ -27,12 +27,12 @@ from quippy.atoms     import Atoms
 from quippy.system    import verbosity_push, PRINT_VERBOSE, enable_timing, system_timer
 from quippy.potential import ForceMixingPotential, Potential
 from quippy.clusters  import  HYBRID_NO_MARK, HYBRID_ACTIVE_MARK
-from simulate_crack   import update_qm_region_context, fix_edges, set_qmmm_pot, pass_print_context,\
-                             check_if_cracked_context, pass_trajectory_context
 
 from matscipy.socketcalc  import  VaspClient, SocketCalculator
+
 from bgqtools             import (get_bootable_blocks, boot_blocks, block_corner_iter, 
                                   get_hostname_ip, get_cobalt_info, set_unbuffered_stdout)
+
 from distribfm            import DistributedForceMixingPotential
 
 sys.path+=['.']
@@ -86,11 +86,14 @@ def traj_writer(dynamics):
     if extrapolate_steps == 1 or dynamics.state == LOTFDynamics.Interpolation:
         trajectory.write(dynamics.atoms)
 
-def update_qm_region(atoms, dis_type='edge'):
-    cut =3.
-    rr = 10
-    qr = 1 
-    thr = 0.1
+def update_qm_region(atoms, dis_type='edge', cut=3.0, rr=10.0, qr=1):
+  """
+  Routine for updating qm region of dislocation. 
+  Args:
+    dis_type: Dislocation type can be edge or screw. 
+    rr: determines radius of quantum sphere.
+    qr: is the number of quantum regions. 
+  """
     core[:] = atoms.params['core']
     fixed_mask = (np.sqrt((atoms.positions[:,0]-core[0])**2 + (atoms.positions[:,1]-core[1])**2) < rr)
     cl = atoms.select(mask=fixed_mask, orig_index=True) 
@@ -136,6 +139,9 @@ def update_qm_region(atoms, dis_type='edge'):
     return 
 
 def update_qm_region_crack(atoms):
+  '''
+    Set quantum region around the crack tip.
+  '''
   mm_pot = Potential(mm_init_args,
                      param_filename = param_file,
                      cutoff_skin    = cutoff_skin)
@@ -157,6 +163,8 @@ def update_qm_region_crack(atoms):
   return
 
 if __name__=='__main__':
+  do_timing    = False
+  do_verbose = False
   if do_verbose:
     verbosity_push(PRINT_VERBOSE)
   if do_timing:
@@ -164,29 +172,21 @@ if __name__=='__main__':
 # ********** Simulation Arguments  ************ #
   parser = argparse.ArgumentParser()
   parser.add_argument("-g","--geom", default='crack')
-  parser.add_argument("-inp", "--input_file", required=True)
+  parser.add_argument("-inp", "--input_file", default='crack.xyz')
   parser.add_argument("-st",  "--sim_T", help='Simulation Temperature in Kelvin. Default is 300 K.', type=float, required=True)
   parser.add_argument("-cfe", "--check_force_error", help='Perform a DFT calculation at each step in the trajectory.', action='store_true')
 # ********** Parallel Arguments  ************ #
-  parser.add_option("--block")
-  parser.add_option("--corner")
-  parser.add_option("--shape")
-  parser.add_option("--npj")
-  parser.add_option("--ppn")
-
+  parser.add_argument("--block")
+  parser.add_argument("--corner")
+  parser.add_argument("--shape")
+  parser.add_argument("--npj")
+  parser.add_argument("--ppn")
 # parse args string:
-  args        = parser.parse_args()
-
-  if args.input_file == '':
-    input_file = 'crack.xyz'
-  else:
-    input_file = args.input_file
-
+  args              = parser.parse_args()
   sim_T             = args.sim_T*units.kB
   geom              = args.geom
   check_force_error = args.check_force_error
   continuation      = False
-
 # COBALT CONFIGURATION
   vasp  = '/projects/SiO2_Fracture/iron/vasp.bgq'
   block  = args.block
@@ -196,11 +196,9 @@ if __name__=='__main__':
   ppn    = int(args.ppn)
   hostname, ip = get_hostname_ip()
 
-  do_timing    = False
-  do_verbosity = False
-
   reference_file = 'ref_slab.xyz' # Reference file for Nye tensor
   continuation = False             # If true, restart form last frame of most recent *.traj.xyz file
+  test_mode    = False
   classical    = False             # If true, do classical MD instead of QM/MM
   sim_T        = 300.0*units.kB    # Simulation temperature
   rescale_velo = False             # Rescale velocities to 2*sim_T  
@@ -208,6 +206,8 @@ if __name__=='__main__':
   cutoff_skin  = 2.0*units.Ang     # Amount by which potential cutoff is increased
                                  # for neighbour calculations
   traj_file    = '%s.traj.xyz'        # Trajectory output file
+
+  rundir = os.getcwd()
 
   try:
     pot_dir      = os.environ['POTDIR']
@@ -219,6 +219,7 @@ if __name__=='__main__':
                                    # potential parameters
   mm_init_args = 'IP EAM_ErcolAd'  # Initialisation arguments for
                                    # classical potential
+
 # ADDITIONAL PARAMETERS FOR THE QM/MM simulation:
   qm_inner_radius   = 3.0*units.Ang # Inner hysteretic radius for QM region
   qm_outer_radius   = 5.0*units.Ang # Outer hysteretic radius for QM region
@@ -227,7 +228,6 @@ if __name__=='__main__':
   extrapolate_steps = 5   # Number of steps for predictor-corrector
                           # interpolation and extrapolation
   traj_interval     = extrapolate_steps # Only print the DFT steps
-  check_force_error = False         # Do QM calc at each step to check pred/corr. err
   nsteps = 1000
   
   save_clusters = False  # if True, write each QM cluster to .xyz files
@@ -238,6 +238,12 @@ if __name__=='__main__':
   while os.path.exists(traj_file):
     traj_index += 1
     traj_file = '%d.traj.xyz' % traj_index
+#
+# Determine input_file. If calculation is continuation 
+# just use the traj numbering system. otherwise default 
+# to crack.xyz
+#
+  input_file = args.input_file
 
   cluster_args = dict(single_cluster=False,
                       cluster_calc_connect=False,
@@ -258,9 +264,9 @@ if __name__=='__main__':
                  nelm=100, algo='VeryFast', npar=32, lplane=False, lwave=False, lcharg=False, istart=0,
                  voskown=1, ismear=1, sigma=0.1, isym=0) # possibly try iwavpr=12, should be faster if it works
 
-  para_args  = dict(npj=npj, ppn=ppn, block=block, corner=corner, shape=shape, exe=vasp)
+  para_args  = dict(npj=npj, ppn=ppn, block=block, corner=corner, shape=shape)
   all_args   = dict(vasp_args.items() + para_args.items())
-  qm_clients = [VaspClient(ip=ip, bgq=True, **all_args)] 
+  qm_clients = [VaspClient(client_id=0, exe=vasp, **all_args)] 
 
 ##### Finished VASP INITIALIZATION AND SOCKET CONFIGURATION ######
 ##### MAIN PROGRAM ############
@@ -277,26 +283,25 @@ if __name__=='__main__':
   
   # loading reference configuration for Nye tensor evaluation
   # convert to quippy Atoms - FIXME in long term, this should not be necesary
-  x0 = Atoms(params.reference_file)
+  x0 = Atoms(reference_file)
   x0 = Atoms(x0)
   x0.set_cutoff(3.0)
   x0.calc_connect()
   
-  print params.param_file
   # ******* Set up potentials and calculators ********
   system_timer('init_fm_pot')
-  pot_file = os.path.join(params.pot_dir, params.param_file)
-  mm_pot = Potential(mm_init_args,
-                     param_filename=params.param_file,
-                     cutoff_skin=params.cutoff_skin)
+  pot_file  = os.path.join(pot_dir, param_file)
+  mm_pot    = Potential(mm_init_args,
+                        param_filename = param_file,
+                        cutoff_skin    = cutoff_skin)
   
-  cluster_args = params.cluster_args.copy()
+  cluster_args = cluster_args.copy()
   
   if test_mode:
       # dummy QM potential made by swapping Ni and Al species in MM potential               
       qm_pot = Potential(mm_init_args,
-                         param_filename='m2004flipNiAl.xml',
-                         cutoff_skin=params.cutoff_skin)
+                         param_filename ='m2004flipNiAl.xml',
+                         cutoff_skin    = cutoff_skin)
       qm_clients = qm_pot
       
       # convergence of EAM forces with buffer size is suprisingly slow,
@@ -305,14 +310,15 @@ if __name__=='__main__':
       cluster_args['hysteretic_buffer_inner_radius'] = 12.0
       cluster_args['hysteretic_buffer_outer_radius'] = 14.0
   else:
-  #    qm_clients = params.qm_clients
     pass
   
-  if params.extrapolate_steps == 1:
+  if extrapolate_steps == 1:
       force_mixing_method = 'conserve_momentum'
   else:
       force_mixing_method = 'lotf_adj_pot_minim'
-  
+ 
+
+  if classical:
       # Use the classical EAM only
       atoms.set_calculator(mm_pot)
   else:
@@ -359,17 +365,16 @@ if __name__=='__main__':
       else:
         print 'No cell geometry given, specifiy either disloc or crack', 1/0 
   
-  # ********* Setup and run MD ***********
-  # Set the initial temperature to 2*simT: it will then equilibriate to
-  # simT, by the virial theorem
+# ********* Setup and run MD ***********
+# Set the initial temperature to 2*simT: it will then equilibriate to
+# simT, by the virial theorem
   if test_mode:
       np.random.seed(0) # use same random seed each time to be deterministic 
   if rescale_velo:
       MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)
-  # Save frames to the trajectory every `traj_interval` time steps
-  # but only when interpolating
+# Save frames to the trajectory every `traj_interval` time steps.
   trajectory = AtomsWriter(os.path.join(rundir, traj_file))
-  # Initialise the dynamical system
+# Initialise the dynamical system
   system_timer('init_dynamics')
   if extrapolate_steps == 1:
       dynamics = VelocityVerlet(atoms, timestep)
@@ -383,38 +388,35 @@ if __name__=='__main__':
                             extrapolate_steps,
                             check_force_error=check_force_error)
   system_timer('init_dynamics')
-#Function to update the QM region at the beginning of each extrapolation cycle   
+# Function to update the QM region at the beginning of each extrapolation cycle   
   if not check_force_error:
-      if extrapolate_steps == 1:
-          if not classical:
-              dynamics.attach(update_qm_region, 1, dynamics.atoms)
+    if extrapolate_steps == 1:
+      if not classical:
+        dynamics.attach(update_qm_region, 1, dynamics.atoms)
+    else:
+# Choose appropriate update function for defects or crack or grainboundary
+      print 'Setting Update Function'
+      if geom =='disloc':
+        dynamics.set_qm_update_func(update_qm_region)
+      elif geom =='crack':
+        dynamics.set_qm_update_func(update_qm_region_crack)
       else:
-      # choose appropriate update function for defects or crack.
-      # or grainboundary.
-        print 'Setting Update Function'
-        if geom =='disloc':
-          dynamics.set_qm_update_func(update_qm_region)
-        elif geom =='crack':
-          dynamics.set_qm_update_func(update_qm_region_crack)
-        else:
-          print 'No geometry chosen', 1/0
+        print 'No geometry chosen', 1/0
   
   if check_force_error:
-      pred_corr_logfile = open(os.path.join(rundir, 'pred-corr-error.txt'), 'w')
-      dynamics.attach(log_pred_corr_errors, 1, dynamics, pred_corr_logfile)
+    pred_corr_logfile = open(os.path.join(rundir, 'pred-corr-error.txt'), 'w')
+    dynamics.attach(log_pred_corr_errors, 1, dynamics, pred_corr_logfile)
      
   dynamics.attach(traj_writer, traj_interval, dynamics)
   print 'Cutoff of atoms is ', dynamics.atoms.cutoff, 'A'
   dynamics.attach(printstatus)
-  # Start running!
+# Start running
   system_timer('dynamics_run')
   dynamics.run(nsteps)
   system_timer('dynamics_run')
   
   if check_force_error:
-      pred_corr_logfile.close()
-  
+    pred_corr_logfile.close()
 # Shutdown clients and cleanup server
   if not classical:
     qmmm_pot.server.shutdown()
-

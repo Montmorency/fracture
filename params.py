@@ -103,7 +103,6 @@ qm_ppn = 4
 nodes = qm_npj*njobs
 rundir = os.getcwd()
 print 'Current Working Directory', rundir
-#qm_env = {'OMP_NUM_THREAD': '1'}
 qm_env = None
 
 # ***** Setup clients and server *******
