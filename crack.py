@@ -1,3 +1,6 @@
+"""
+Module containing CrackCell object.
+"""
 from cStringIO import StringIO
 import sys
 import pickle
@@ -27,12 +30,6 @@ import os
 import numpy as np
 
 set_fortran_indexing(False)
-#
-# Crack Object for rapid generation of prototypical crack simulation
-# in an ideal crystal. This should allow for quick generation of
-# different crack geometries, strain rates, etc. The crack_params
-# dictionary should take care of all the parameters.
-#
 default_crack_params = {
   'input_file'  : 'crack.xyz',    # crack_slab
   'sim_T'       : 300.0*units.kB, # Simulation temperature
@@ -97,6 +94,14 @@ class Capturing(list):
     sys.stdout = self._stdout
 
 class CrackCell(object):
+  """
+  CrackCell defines the parameters
+  for an ideal mode 1 crack geometry. This is intended 
+  to allow for the quick generation of different crack
+  geometries, strain rates, etc. It also encapsulates
+  the methods to initialize the seed crack and relax the 
+  initial configuration.
+  """
   def __init__(self, cij=[], **kwargs):
     self.symbol = 'Si'
     self.width  = 500.0*units.Ang        # Width of crack slab
@@ -131,18 +136,28 @@ class CrackCell(object):
       setattr(self, key, kwargs[key])
 
   def __repr__(self):
+    """
+    Print the CrackCell geometry in canonical form.
+    """
     with Capturing() as output:
       print_crack_system(self.crack_direction, self.cleavage_plane, self.crack_front)
     return '\n'.join(output)
   
   def calculate_c(self,size=(1,1,1)):
+    """
+    Calculate the elastic constants for the underlying crack unit cell.
+    """
     if self.symbol=='Si':
       at_bulk = bulk('Si', a=self.a0, cubic=True)
     elif self.symbol=='Fe':
       at_bulk = BodyCenteredCubic(directions=[self.crack_direction, self.cleavage_plane, self.crack_front],
                                size=size, symbol='Fe', pbc=(1,1,1),
                                latticeconstant=self.a0)
-    pot_dir  = '/Users/lambert/pymodules/imeall/imeall/potentials/'
+    try:
+      pot_dir  = os.environ['POTDIR']
+    except:
+      print 'POTDIR not defined in os environment.'
+      raise
     pot_file = os.path.join(pot_dir, self.param_file)
     pot     = Potential(self.mm_init_args, param_filename=pot_file)
     at_bulk.set_calculator(pot)
@@ -151,6 +166,10 @@ class CrackCell(object):
     return
 
   def build_unit_slab(self, size=(1,1,1)):
+    """
+    Initialize the unit slab for the given crack geometry.
+    Currently supports silicon and Fe.
+    """
     if self.symbol=='Si':
       unit_slab = Diamond(directions = [self.crack_direction, self.cleavage_plane, self.crack_front],
                           size = size, symbol=self.symbol, pbc=True, latticeconstant= self.a0)
@@ -168,6 +187,9 @@ class CrackCell(object):
     return unit_slab
 
   def build_surface(self, size=(1,1,1)):
+    """
+    Create an equivalent surface unit cell for the fracture system.
+    """
     if self.symbol=='Si':
       unit_slab = Diamond(directions = [self.crack_direction, self.cleavage_plane, self.crack_front],
                           size = size, symbol=self.symbol, pbc=True, latticeconstant= self.a0)
@@ -186,9 +208,12 @@ class CrackCell(object):
     surface.set_calculator(pot)
     return surface
 
-  def build_crack_cell(self, unit_slab):
-#return a copy of the surface and the crack_cell
-#with the constraints on the Atoms.
+  def build_crack_cell(self, unit_slab, fix_dist=1.0):
+    """
+    Creates a CrackCell of the desired size and orientation
+    with the top and bottom layer of atoms constrained.
+    Returns: :class:`Atoms` - the relaxed crack_cell.
+    """
     self.nx = int(self.width/unit_slab.get_cell()[0,0])
     self.ny = int(self.height/unit_slab.get_cell()[1,1])
     if self.ny %2 == 1:
@@ -211,18 +236,15 @@ class CrackCell(object):
     bottom = crack_slab.positions[:,1].min()
     left   = crack_slab.positions[:,0].min()
     right  = crack_slab.positions[:,0].max()
-#Fix top and bottom layer of atoms:
+#Constrain top and bottom layer of atoms:
     fixed_mask = ((abs(crack_slab.positions[:, 1] - top) < 1.0) |
                   (abs(crack_slab.positions[:, 1] - bottom) < 1.0))
     const = FixAtoms(mask=fixed_mask)
     crack_slab.set_constraint(const)
-#print('Fixed %d atoms\n' % fixed_mask.sum())
-#Strain is a dimensionless ratio require elastic tensor
-#to translate the initial energy flow to the tip into a strain
+# Strain is a dimensionless ratio we require elastic tensor
+# to translate the initial energy flow to the tip into a strain.
     self.E  = youngs_modulus(self.cij, self.cleavage_plane)
     self.nu = poisson_ratio(self.cij, self.cleavage_plane, self.crack_direction)
-    print self.cij/units.GPa
-    print 'Rayleigh', rayleigh_wave_speed(self.cij/units.GPa, 2.85, isotropic=True)
     self.strain = G_to_strain(self.initial_G, self.E, self.nu, self.orig_height)
     seed = left + self.crack_seed_length
     tip  = left + self.crack_seed_length + self.strain_ramp_length
@@ -230,15 +252,17 @@ class CrackCell(object):
     ypos = crack_slab.positions[:,1]
     crack_slab.positions[:,1] += thin_strip_displacement_y(xpos, ypos, self.strain, seed, tip)
     write('crack_slab_init.xyz', crack_slab)
+
     print('Applied initial load: strain=%.4f, G=%.2f J/m^2' %
          (self.strain, self.initial_G / (units.J / units.m**2)))
+
     pot_dir  = '/Users/lambert/pymodules/imeall/imeall/potentials/'
     pot_file = os.path.join(pot_dir, self.param_file)
     pot      = Potential(self.mm_init_args, param_filename=pot_file)
     crack_slab.set_calculator(pot)
     print('Relaxing slab...')
-    #slab_opt = Minim(crack_slab, relax_positions=True, relax_cell=False)
-    #slab_opt = FIRE(crack_slab) 
+#slab_opt = Minim(crack_slab, relax_positions=True, relax_cell=False)
+#slab_opt = FIRE(crack_slab) 
     slab_opt = LBFGS(crack_slab)
     slab_opt.run(fmax=self.relax_fmax)
     return crack_slab
