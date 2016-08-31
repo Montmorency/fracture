@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # fracture documentation build configuration file, created by
-# sphinx-quickstart on Wed Aug 31 18:02:50 2016.
+# sphinx-quickstart on Wed Aug 31 18:15:30 2016.
 #
 # This file is execfile()d with the current directory set to its
 # containing dir.
@@ -33,7 +33,6 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.intersphinx',
     'sphinx.ext.todo',
-    'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
 ]
@@ -87,7 +86,7 @@ language = None
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This patterns also effect to html_static_path and html_extra_path
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = []
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
