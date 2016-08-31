@@ -40,5 +40,3 @@ run from the working directory:
 To begin the dynamical simulation:
   `python run_crack.py`
 
-
-
