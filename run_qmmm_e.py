@@ -94,54 +94,54 @@ def update_qm_region(atoms, dis_type='edge', cut=3.0, rr=10.0, qr=1):
     rr: determines radius of quantum sphere.
     qr: is the number of quantum regions. 
   """
-    core[:] = atoms.params['core']
-    fixed_mask = (np.sqrt((atoms.positions[:,0]-core[0])**2 + (atoms.positions[:,1]-core[1])**2) < rr)
-    cl = atoms.select(mask=fixed_mask, orig_index=True) 
-    print 'Number of Atoms in Cluster', cl.n
-    cl.set_cutoff(cut)
-    cl.calc_connect()
-    cl = Atoms(cl)
-    x0 = Atoms('ref_slab.xyz')
-    x0.set_cutoff(cut)
-    x0.calc_connect()
-    alpha = calc_nye_tensor(cl, x0, 3, 3, cl.n)    
-    cl.screw = alpha[2,2,:]
-    cl.edge  = alpha[2,0,:]
-    if dis_type  == 'screw':
-      defect_pos = cl.screw
-    elif dis_type == 'edge':
-      defect_pos = cl.edge
-    total_def = 0.0
-    c = np.array([0.,0.,0.])
-    mom = [3.0 for at in range(len(atoms))]
-    atoms.set_initial_magnetic_moments(mom)
-    for i in range(cl.n):
-        defect_pos = defect_pos   + cl.edge[i]
-        c[1] = c[1] + cl.positions[i,0]*defect_pos[i]
-        c[2] = c[2] + cl.pos[i,0]*defect_pos[i]
-    c[0] = c[0]/total_def
-    c[1] = c[1]/total_def
-    c[2] = atoms.lattice[2,2]/2.
-    core[:] = c.copy()
-    old_qm_list = atoms.hybrid_vec.nonzero()[0]
-    new_qm_list = update_hysteretic_qm_region(atoms, old_qm_list, core[:],
-                                              qm_inner_radius,
-                                              qm_outer_radius,
-                                              update_marks=False)
+  core[:] = atoms.params['core']
+  fixed_mask = (np.sqrt((atoms.positions[:,0]-core[0])**2 + (atoms.positions[:,1]-core[1])**2) < rr)
+  cl = atoms.select(mask=fixed_mask, orig_index=True) 
+  print 'Number of Atoms in Cluster', cl.n
+  cl.set_cutoff(cut)
+  cl.calc_connect()
+  cl = Atoms(cl)
+  x0 = Atoms('ref_slab.xyz')
+  x0.set_cutoff(cut)
+  x0.calc_connect()
+  alpha = calc_nye_tensor(cl, x0, 3, 3, cl.n)    
+  cl.screw = alpha[2,2,:]
+  cl.edge  = alpha[2,0,:]
+  if dis_type  == 'screw':
+    defect_pos = cl.screw
+  elif dis_type == 'edge':
+    defect_pos = cl.edge
+  total_def = 0.0
+  c = np.array([0.,0.,0.])
+  mom = [3.0 for at in range(len(atoms))]
+  atoms.set_initial_magnetic_moments(mom)
+  for i in range(cl.n):
+    defect_pos = defect_pos   + cl.edge[i]
+    c[1] = c[1] + cl.positions[i,0]*defect_pos[i]
+    c[2] = c[2] + cl.pos[i,0]*defect_pos[i]
+  c[0] = c[0]/total_def
+  c[1] = c[1]/total_def
+  c[2] = atoms.lattice[2,2]/2.
+  core[:] = c.copy()
+  old_qm_list = atoms.hybrid_vec.nonzero()[0]
+  new_qm_list = update_hysteretic_qm_region(atoms, old_qm_list, core[:],
+                                            qm_inner_radius,
+                                            qm_outer_radius,
+                                            update_marks=False)
 #Force Mixing Potential requires hybrid property:
-    atoms.hybrid[:] = 0
-    atoms.hybrid[new_qm_list] = 1
+  atoms.hybrid[:] = 0
+  atoms.hybrid[new_qm_list] = 1
 #Distributed Force Mixing Properties:
-    atoms.hybrid_vec[:] = 0
-    atoms.hybrid_vec[new_qm_list] = 1
-    atoms.hybrid_1[:] = atoms.hybrid_vec[:]
-    atoms.params['core'] = core[:]
-    return 
+  atoms.hybrid_vec[:] = 0
+  atoms.hybrid_vec[new_qm_list] = 1
+  atoms.hybrid_1[:] = atoms.hybrid_vec[:]
+  atoms.params['core'] = core[:]
+  return 
 
 def update_qm_region_crack(atoms):
-  '''
+  """
     Set quantum region around the crack tip.
-  '''
+  """
   mm_pot = Potential(mm_init_args,
                      param_filename = param_file,
                      cutoff_skin    = cutoff_skin)
@@ -171,10 +171,11 @@ if __name__=='__main__':
     enable_timing()
 # ********** Simulation Arguments  ************ #
   parser = argparse.ArgumentParser()
-  parser.add_argument("-g","--geom", default='crack')
+  parser.add_argument("-g",   "--geom", default='crack')
   parser.add_argument("-inp", "--input_file", default='crack.xyz')
   parser.add_argument("-st",  "--sim_T", help='Simulation Temperature in Kelvin. Default is 300 K.', type=float, required=True)
   parser.add_argument("-cfe", "--check_force_error", help='Perform a DFT calculation at each step in the trajectory.', action='store_true')
+  parser.add_argument("-c",   "--continuation" , action="store_true")
 # ********** Parallel Arguments  ************ #
   parser.add_argument("--block")
   parser.add_argument("--corner")
@@ -186,7 +187,6 @@ if __name__=='__main__':
   sim_T             = args.sim_T*units.kB
   geom              = args.geom
   check_force_error = args.check_force_error
-  continuation      = False
 # COBALT CONFIGURATION
   vasp  = '/projects/SiO2_Fracture/iron/vasp.bgq'
   block  = args.block
@@ -197,11 +197,11 @@ if __name__=='__main__':
   hostname, ip = get_hostname_ip()
 
   reference_file = 'ref_slab.xyz' # Reference file for Nye tensor
-  continuation = False             # If true, restart form last frame of most recent *.traj.xyz file
+  continuation = args.continuation             # If true, restart form last frame of most recent *.traj.xyz file
   test_mode    = False
   classical    = False             # If true, do classical MD instead of QM/MM
   sim_T        = 300.0*units.kB    # Simulation temperature
-  rescale_velo = False             # Rescale velocities to 2*sim_T  
+  rescale_velo = True             # Rescale velocities to 2*sim_T  
   timestep     = 1.0*units.fs      # Timestep (NB: time base units are not fs!)
   cutoff_skin  = 2.0*units.Ang     # Amount by which potential cutoff is increased
                                  # for neighbour calculations
@@ -271,15 +271,16 @@ if __name__=='__main__':
 ##### Finished VASP INITIALIZATION AND SOCKET CONFIGURATION ######
 ##### MAIN PROGRAM ############
 
-  print 'Loading atoms from file %s' % input_file
-  atoms = Atoms(input_file)
-  atoms = Atoms(atoms)
   if continuation:
       # restart from last frame of most recent trajectory file
       traj_files = sorted(glob.glob('[0-9]*.traj.xyz'))
       if len(traj_files) > 0:
           last_traj = traj_files[-1]
           input_file = last_traj + '@-1'
+
+  print 'Loading atoms from file %s' % input_file
+  atoms = Atoms(input_file)
+  atoms = Atoms(atoms)
   
   # loading reference configuration for Nye tensor evaluation
   # convert to quippy Atoms - FIXME in long term, this should not be necesary
@@ -339,7 +340,8 @@ if __name__=='__main__':
       atoms.set_calculator(qmmm_pot)
   system_timer('init_fm_pot')
   
-  if not continuation and not classical:
+  #if not continuation and not classical:
+  if not classical:
       print 'Finding initial Quantum Core positions...'
       if geom =='disloc':
         atoms  = set_quantum_disloc(atoms)
@@ -368,10 +370,9 @@ if __name__=='__main__':
 # ********* Setup and run MD ***********
 # Set the initial temperature to 2*simT: it will then equilibriate to
 # simT, by the virial theorem
-  if test_mode:
-      np.random.seed(0) # use same random seed each time to be deterministic 
-  if rescale_velo:
-      MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)
+  if not continuation and rescale_velo:
+    np.random.seed(42) # use same random seed each time to be deterministic 
+    MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)
 # Save frames to the trajectory every `traj_interval` time steps.
   trajectory = AtomsWriter(os.path.join(rundir, traj_file))
 # Initialise the dynamical system
