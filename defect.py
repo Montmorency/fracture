@@ -60,6 +60,14 @@ def defect_json(**json_args):
   with open('defect.json','w') as f:
     json.dump(j_object, f, indent=2)
 
+def pp_virial(at):
+#same as in quippy.potential
+  stresses = at.get_stresses()
+  at.add_property('local_virial', 0.0, n_cols=9, overwrite=True)
+  lv = at.local_virial.view(np.ndarray)
+  vol_per_atom = at.get_volume()/len(at)
+  lv[...] = -stresses.T.reshape((9,len(at)))*vol_per_atom
+
 def pp_nye_tensor(at, rr=15.0, dis_type='edge'):
 # Post Processing routine to append nye tensor information
 # to atoms object.
@@ -146,8 +154,9 @@ screw_slab_unit = BodyCenteredCubic(directions = [x, y, z], size=(1,1,1),
 if __name__=='__main__':
 #Parse Arguments:
   parser = argparse.ArgumentParser()
-  parser.add_argument("-rd",  "--run_dyn",    help="Performs a relaxation", action='store_true')
-  parser.add_argument("-cn",  "--calc_nye",   help="Calculate nye tensor",  action='store_true')
+  parser.add_argument("-rd",  "--run_dyn",     help="Performs a relaxation", action='store_true')
+  parser.add_argument("-cn",  "--calc_nye",    help="Calculate nye tensor",  action='store_true')
+  parser.add_argument("-cv",  "--calc_virial", help="Calculate viral tensor and append to atoms object ",  action='store_true')
   parser.add_argument("-inp", "--input_file", help="name of input file with no suffix", required=True)
   parser.add_argument("-dt",  "--dis_type",   help= "Can be 'edge' or 'screw'", required=True)
   parser.add_argument("-pt",  "--pot_type",   help='Potential associated with dynamics: TB or EAM', default='EAM')
@@ -157,6 +166,7 @@ if __name__=='__main__':
   args        = parser.parse_args()
   run_dyn     = args.run_dyn
   calc_nye    = args.calc_nye
+  calc_virial = args.calc_virial
   input_file  = args.input_file
   dis_type    = args.dis_type
   pot_type    = args.pot_type
@@ -272,7 +282,7 @@ if __name__=='__main__':
 
       print 'Initializing EAM Potential'
       potdir = '/Users/lambert/pymodules/imeall/imeall/potentials'
-      eam_pot = os.path.join(potdir, 'Fe_Mendelev.xml')
+      eam_pot = os.path.join(potdir, 'PotBH.xml')
       r_scale = 1.00894848312
       mm_pot  = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot)
   
@@ -301,7 +311,7 @@ if __name__=='__main__':
                                  min_images_only=True)
       defect.set_calculator(qmmm_pot)
     elif pot_type == 'EAM':
-      eam_pot = os.path.join(potdir, 'Fe_Mendelev.xml')
+      eam_pot = os.path.join(potdir, 'PotBH.xml')
       r_scale = 1.00894848312
       pot  = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot)
       defect.set_calculator(pot)
@@ -343,7 +353,7 @@ if __name__=='__main__':
     defect.write('{0}_therm.xyz'.format(input_file))
     print 'Crack Simulation Finished'
 
-  if calc_nye:
+  if calc_nye or calc_virial:
 #ats = AtomsReader('{0}_traj.xyz'.format(input_file))
     ats = AtomsReader('{0}.xyz'.format(input_file))
     hyb = np.zeros(ats[0].n)
@@ -363,5 +373,8 @@ if __name__=='__main__':
       if i > 0:
         at.info['core'] = new_core
       new_core = pp_nye_tensor(at, dis_type=dis_type)
+      if calc_virial:
+        at.set_calculator(pot)  
+        pp_virial(at) 
       print i, new_core
       traj_burg.write(at)

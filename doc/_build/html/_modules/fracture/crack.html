@@ -1,0 +1,434 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>fracture.crack &mdash; fracture 0.0 documentation</title>
+    
+    <link rel="stylesheet" href="../../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="fracture 0.0 documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body role="document">
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for fracture.crack</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Module containing CrackCell object.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">cStringIO</span> <span class="k">import</span> <span class="n">StringIO</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">pickle</span>
+
+<span class="kn">import</span> <span class="nn">ase.units</span> <span class="k">as</span> <span class="nn">units</span>
+<span class="kn">from</span>   <span class="nn">ase.lattice</span>       <span class="k">import</span> <span class="n">bulk</span>
+<span class="kn">from</span>   <span class="nn">ase.constraints</span>   <span class="k">import</span> <span class="n">FixAtoms</span>
+<span class="kn">from</span>   <span class="nn">ase.lattice.cubic</span> <span class="k">import</span> <span class="n">Diamond</span><span class="p">,</span> <span class="n">BodyCenteredCubic</span>
+<span class="kn">from</span>   <span class="nn">ase.optimize</span>      <span class="k">import</span> <span class="n">FIRE</span>
+<span class="c1">#from   ase.optimize      import LBFGS</span>
+<span class="c1">#preconditioned LBFGS is !much! faster for the crack slab</span>
+<span class="c1">#relaxations tested so far.</span>
+<span class="kn">from</span>   <span class="nn">ase.optimize.precon</span>  <span class="k">import</span> <span class="n">LBFGS</span>
+
+<span class="kn">from</span>   <span class="nn">quippy</span>            <span class="k">import</span> <span class="n">set_fortran_indexing</span>
+<span class="kn">from</span>   <span class="nn">quippy.potential</span>  <span class="k">import</span> <span class="n">Potential</span><span class="p">,</span> <span class="n">Minim</span>
+<span class="kn">from</span>   <span class="nn">quippy.elasticity</span> <span class="k">import</span> <span class="n">youngs_modulus</span><span class="p">,</span> <span class="n">poisson_ratio</span><span class="p">,</span> <span class="n">rayleigh_wave_speed</span><span class="p">,</span> <span class="n">AtomResolvedStressField</span>
+<span class="kn">from</span>   <span class="nn">quippy.io</span>    <span class="k">import</span> <span class="n">write</span>
+<span class="kn">from</span>   <span class="nn">quippy.crack</span> <span class="k">import</span> <span class="n">print_crack_system</span><span class="p">,</span> <span class="n">G_to_strain</span><span class="p">,</span>\
+                            <span class="n">thin_strip_displacement_y</span><span class="p">,</span>\
+                            <span class="n">find_crack_tip_stress_field</span>
+
+<span class="kn">from</span> <span class="nn">quippy</span> <span class="k">import</span> <span class="n">bcc</span><span class="p">,</span> <span class="n">calc_nye_tensor</span><span class="p">,</span> <span class="n">Atoms</span><span class="p">,</span> <span class="n">supercell</span>
+<span class="c1">#from qlab import view, aux_property_coloring</span>
+
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="n">set_fortran_indexing</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">default_crack_params</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s1">&#39;input_file&#39;</span>  <span class="p">:</span> <span class="s1">&#39;crack.xyz&#39;</span><span class="p">,</span>    <span class="c1"># crack_slab</span>
+  <span class="s1">&#39;sim_T&#39;</span>       <span class="p">:</span> <span class="mf">300.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">kB</span><span class="p">,</span> <span class="c1"># Simulation temperature</span>
+  <span class="s1">&#39;nsteps&#39;</span>      <span class="p">:</span> <span class="mi">10000</span><span class="p">,</span>          <span class="c1"># Total number of timesteps to run for</span>
+  <span class="s1">&#39;timestep&#39;</span>    <span class="p">:</span> <span class="mf">1.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">fs</span><span class="p">,</span>   <span class="c1"># Timestep (NB: time base units are not fs!)</span>
+  <span class="s1">&#39;cutoff_skin&#39;</span> <span class="p">:</span> <span class="mf">2.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span><span class="p">,</span>  <span class="c1"># Amount by which potential cutoff is increased</span>
+                                  <span class="c1"># for neighbour calculations.</span>
+  <span class="s1">&#39;tip_move_tol&#39;</span>      <span class="p">:</span> <span class="mf">10.0</span><span class="p">,</span>     <span class="c1"># Distance tip has to move before crack</span>
+                                  <span class="c1"># is taken to be running.</span>
+  <span class="s1">&#39;strain_rate&#39;</span>       <span class="p">:</span> <span class="mi">1</span><span class="n">e</span><span class="o">-</span><span class="mi">7</span><span class="o">*</span><span class="p">(</span><span class="mf">1.0</span><span class="o">/</span><span class="n">units</span><span class="o">.</span><span class="n">fs</span><span class="p">),</span>
+  <span class="s1">&#39;traj_interval&#39;</span>     <span class="p">:</span> <span class="mi">10</span><span class="p">,</span>                 <span class="c1"># Number of time steps between interpolations</span>
+  <span class="s1">&#39;traj_file&#39;</span>         <span class="p">:</span> <span class="s1">&#39;traj_lotf_2.xyz&#39;</span><span class="p">,</span>  <span class="c1"># Trajectory output file in (NetCDF format)</span>
+  <span class="s1">&#39;restart_traj_file&#39;</span> <span class="p">:</span> <span class="s1">&#39;traj_lotf_2b.xyz&#39;</span><span class="p">,</span> <span class="c1"># Trajectory output file in (NetCDF format)</span>
+  <span class="s1">&#39;print_interval&#39;</span>    <span class="p">:</span>  <span class="mi">20</span><span class="p">,</span>              <span class="c1"># time steps between trajectory prints n fs</span>
+  <span class="s1">&#39;param_file&#39;</span>        <span class="p">:</span> <span class="s1">&#39;params.xml&#39;</span><span class="p">,</span> <span class="c1"># Filename of XML file containing</span>
+                                         <span class="c1"># potential parameters</span>
+  <span class="c1">#&#39;mm_init_args&#39;      :&#39;IP EAM_ErcolAd&#39;, # Classical potential</span>
+  <span class="s1">&#39;mm_init_args&#39;</span>      <span class="p">:</span><span class="s1">&#39;IP SW&#39;</span><span class="p">,</span> <span class="c1"># Classical potential</span>
+  <span class="s1">&#39;qm_init_args&#39;</span>      <span class="p">:</span><span class="s1">&#39;TB DFTB&#39;</span><span class="p">,</span>       <span class="c1"># Initialisation arguments for QM potential</span>
+  <span class="s1">&#39;qm_inner_radius&#39;</span>   <span class="p">:</span> <span class="mf">18.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span><span class="p">,</span> <span class="c1"># Inner hysteretic radius for QM region</span>
+  <span class="s1">&#39;qm_outer_radius&#39;</span>   <span class="p">:</span> <span class="mf">21.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span><span class="p">,</span> <span class="c1"># Outer hysteretic radius for QM region</span>
+  <span class="s1">&#39;extrapolate_steps&#39;</span> <span class="p">:</span> <span class="mi">10</span><span class="p">,</span>               <span class="c1"># Number of steps for predictor-corrector</span>
+                                        <span class="c1"># interpolation and extrapolation</span>
+  <span class="s1">&#39;cleavage_plane&#39;</span>    <span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">),</span>
+  <span class="s1">&#39;crack_front&#39;</span>       <span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">),</span>
+  <span class="s1">&#39;crack_direction&#39;</span>   <span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span>
+  <span class="s1">&#39;symbol&#39;</span>            <span class="p">:</span> <span class="s1">&#39;Si&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;width&#39;</span>  <span class="p">:</span> <span class="mf">900.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span><span class="p">,</span>             <span class="c1"># Width of crack slab</span>
+  <span class="s1">&#39;height&#39;</span> <span class="p">:</span> <span class="mf">300.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span><span class="p">,</span>             <span class="c1"># Height of crack slab</span>
+  <span class="s1">&#39;vacuum&#39;</span> <span class="p">:</span> <span class="mf">25.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span><span class="p">,</span>              <span class="c1"># Amount of vacuum around slab</span>
+  <span class="s1">&#39;crack_seed_length&#39;</span>  <span class="p">:</span> <span class="mf">250.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span><span class="p">,</span> <span class="c1"># Length of seed crack</span>
+  <span class="s1">&#39;strain_ramp_length&#39;</span> <span class="p">:</span> <span class="mf">50.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span><span class="p">,</span>  <span class="c1"># Distance over which strain is ramped up</span>
+  <span class="s1">&#39;initial_G&#39;</span>  <span class="p">:</span> <span class="mf">4.5</span><span class="o">*</span><span class="p">(</span><span class="n">units</span><span class="o">.</span><span class="n">J</span><span class="o">/</span><span class="n">units</span><span class="o">.</span><span class="n">m</span><span class="o">**</span><span class="mi">2</span><span class="p">),</span> <span class="c1"># Initial energy flow to crack tip</span>
+  <span class="s1">&#39;relax_fmax&#39;</span> <span class="p">:</span> <span class="mf">0.025</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">eV</span><span class="o">/</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span>   <span class="c1"># Maximum force criteria</span>
+<span class="p">}</span>
+
+<span class="c1"># Return dictionary of default params</span>
+<span class="c1"># these can be edited and then pickled.</span>
+<span class="c1"># with gen_inputfile</span>
+<span class="k">def</span> <span class="nf">init_dict</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+  <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+    <span class="n">default_crack_params</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+  <span class="k">return</span> <span class="n">default_crack_params</span>
+
+<span class="k">def</span> <span class="nf">gen_inputfile</span><span class="p">(</span><span class="n">crack_dict</span><span class="p">,</span> <span class="n">filename</span><span class="p">):</span>
+  <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;.pckl&#39;</span><span class="p">),</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span>
+  <span class="n">g</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;txt&#39;</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">))</span>
+  <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">crack_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="nb">print</span> <span class="o">&gt;&gt;</span> <span class="n">g</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span>
+  <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">crack_dict</span><span class="p">)</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+  <span class="n">g</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<span class="c1">#Capturing</span>
+<span class="k">class</span> <span class="nc">Capturing</span><span class="p">(</span><span class="nb">list</span><span class="p">):</span>
+  <span class="k">def</span> <span class="nf">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_stdout</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stringio</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">()</span>
+    <span class="k">return</span> <span class="bp">self</span>
+  <span class="k">def</span> <span class="nf">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stringio</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span><span class="o">.</span><span class="n">splitlines</span><span class="p">())</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stdout</span>
+
+<div class="viewcode-block" id="CrackCell"><a class="viewcode-back" href="../../crack.html#fracture.crack.CrackCell">[docs]</a><span class="k">class</span> <span class="nc">CrackCell</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+  <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">  CrackCell defines the parameters</span>
+<span class="sd">  for an ideal mode 1 crack geometry. This is intended </span>
+<span class="sd">  to allow for the quick generation of different crack</span>
+<span class="sd">  geometries, strain rates, etc. It also encapsulates</span>
+<span class="sd">  the methods to initialize the seed crack and relax the </span>
+<span class="sd">  initial configuration.</span>
+<span class="sd">  &quot;&quot;&quot;</span>
+  <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cij</span><span class="o">=</span><span class="p">[],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">symbol</span> <span class="o">=</span> <span class="s1">&#39;Si&#39;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">width</span>  <span class="o">=</span> <span class="mf">500.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span>        <span class="c1"># Width of crack slab</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">height</span> <span class="o">=</span> <span class="mf">166.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span>        <span class="c1"># Height of crack slab</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">vacuum</span> <span class="o">=</span> <span class="mf">100.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span>        <span class="c1"># Amount of vacuum around slab</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">crack_seed_length</span>  <span class="o">=</span> <span class="mf">250.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span>    <span class="c1"># Length of seed crack</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">strain_ramp_length</span> <span class="o">=</span> <span class="mf">60.0</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span>    <span class="c1"># Distance over which strain is ramped up</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">initial_G</span>  <span class="o">=</span> <span class="mf">4.5</span><span class="o">*</span><span class="p">(</span><span class="n">units</span><span class="o">.</span><span class="n">J</span><span class="o">/</span><span class="n">units</span><span class="o">.</span><span class="n">m</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># Initial energy flow to crack tip</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">relax_fmax</span> <span class="o">=</span> <span class="mf">0.020</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">eV</span><span class="o">/</span><span class="n">units</span><span class="o">.</span><span class="n">Ang</span>  <span class="c1"># Maximum force criteria</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">param_file</span> <span class="o">=</span> <span class="s1">&#39;params.xml&#39;</span>              <span class="c1"># XML file containing</span>
+                                   <span class="c1"># interatomic potential parameters</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">mm_init_args</span>    <span class="o">=</span> <span class="s1">&#39;IP SW&#39;</span> <span class="c1"># Initialisation arguments</span>
+                                   <span class="c1"># for the classical potential</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">output_file</span>     <span class="o">=</span> <span class="s1">&#39;crack.xyz&#39;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">cleavage_plane</span>  <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">crack_direction</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">crack_front</span>     <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">a0</span>              <span class="o">=</span> <span class="mf">2.85</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">nx</span>              <span class="o">=</span> <span class="mi">1</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">ny</span>              <span class="o">=</span> <span class="mi">1</span>
+<span class="c1">#These are derived properties cell must be initialized before</span>
+<span class="c1">#they are calculated</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">cij</span>             <span class="o">=</span> <span class="n">cij</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">E</span>               <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">nu</span>              <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">orig_height</span>     <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">orig_width</span>      <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">strain</span>          <span class="o">=</span> <span class="mf">0.0</span>
+
+<span class="c1">#Initialize the crack object with a dictionary of the relevant parameters</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+      <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+
+  <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Print the CrackCell geometry in canonical form.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">Capturing</span><span class="p">()</span> <span class="k">as</span> <span class="n">output</span><span class="p">:</span>
+      <span class="n">print_crack_system</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">crack_direction</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cleavage_plane</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">crack_front</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+  
+<div class="viewcode-block" id="CrackCell.calculate_c"><a class="viewcode-back" href="../../crack.html#fracture.crack.CrackCell.calculate_c">[docs]</a>  <span class="k">def</span> <span class="nf">calculate_c</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">)):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate the elastic constants for the underlying crack unit cell.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">symbol</span><span class="o">==</span><span class="s1">&#39;Si&#39;</span><span class="p">:</span>
+      <span class="n">at_bulk</span> <span class="o">=</span> <span class="n">bulk</span><span class="p">(</span><span class="s1">&#39;Si&#39;</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">a0</span><span class="p">,</span> <span class="n">cubic</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">symbol</span><span class="o">==</span><span class="s1">&#39;Fe&#39;</span><span class="p">:</span>
+      <span class="n">at_bulk</span> <span class="o">=</span> <span class="n">BodyCenteredCubic</span><span class="p">(</span><span class="n">directions</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">crack_direction</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cleavage_plane</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">crack_front</span><span class="p">],</span>
+                               <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span> <span class="n">symbol</span><span class="o">=</span><span class="s1">&#39;Fe&#39;</span><span class="p">,</span> <span class="n">pbc</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span>
+                               <span class="n">latticeconstant</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">a0</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+      <span class="n">pot_dir</span>  <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;POTDIR&#39;</span><span class="p">]</span>
+    <span class="k">except</span><span class="p">:</span>
+      <span class="nb">print</span> <span class="s1">&#39;POTDIR not defined in os environment.&#39;</span>
+      <span class="k">raise</span>
+    <span class="n">pot_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">pot_dir</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">param_file</span><span class="p">)</span>
+    <span class="n">pot</span>     <span class="o">=</span> <span class="n">Potential</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mm_init_args</span><span class="p">,</span> <span class="n">param_filename</span><span class="o">=</span><span class="n">pot_file</span><span class="p">)</span>
+    <span class="n">at_bulk</span><span class="o">.</span><span class="n">set_calculator</span><span class="p">(</span><span class="n">pot</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">cij</span>  <span class="o">=</span> <span class="n">pot</span><span class="o">.</span><span class="n">get_elastic_constants</span><span class="p">(</span><span class="n">at_bulk</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">cij</span> <span class="o">/</span> <span class="n">units</span><span class="o">.</span><span class="n">GPa</span><span class="p">)</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+    <span class="k">return</span></div>
+
+<div class="viewcode-block" id="CrackCell.build_unit_slab"><a class="viewcode-back" href="../../crack.html#fracture.crack.CrackCell.build_unit_slab">[docs]</a>  <span class="k">def</span> <span class="nf">build_unit_slab</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">)):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Initialize the unit slab for the given crack geometry.</span>
+<span class="sd">    Currently supports silicon and Fe.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">symbol</span><span class="o">==</span><span class="s1">&#39;Si&#39;</span><span class="p">:</span>
+      <span class="n">unit_slab</span> <span class="o">=</span> <span class="n">Diamond</span><span class="p">(</span><span class="n">directions</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">crack_direction</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cleavage_plane</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">crack_front</span><span class="p">],</span>
+                          <span class="n">size</span> <span class="o">=</span> <span class="n">size</span><span class="p">,</span> <span class="n">symbol</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">symbol</span><span class="p">,</span> <span class="n">pbc</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">latticeconstant</span><span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">a0</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">symbol</span><span class="o">==</span><span class="s1">&#39;Fe&#39;</span><span class="p">:</span>
+      <span class="n">unit_slab</span> <span class="o">=</span> <span class="n">BodyCenteredCubic</span><span class="p">(</span><span class="n">directions</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">crack_direction</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cleavage_plane</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">crack_front</span><span class="p">],</span>
+                               <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span> <span class="n">symbol</span><span class="o">=</span><span class="s1">&#39;Fe&#39;</span><span class="p">,</span> <span class="n">pbc</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span>
+                               <span class="n">latticeconstant</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">a0</span><span class="p">)</span>
+    <span class="nb">print</span> <span class="s1">&#39;Number atoms in unit slab&#39;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">unit_slab</span><span class="p">)</span>
+    <span class="n">unit_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="p">(</span><span class="n">unit_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="n">unit_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span><span class="o">/</span><span class="mf">2.0</span>
+    <span class="n">unit_slab</span><span class="o">.</span><span class="n">set_scaled_positions</span><span class="p">(</span><span class="n">unit_slab</span><span class="o">.</span><span class="n">get_scaled_positions</span><span class="p">())</span>
+    <span class="n">pot_dir</span>  <span class="o">=</span> <span class="s1">&#39;/Users/lambert/pymodules/imeall/imeall/potentials/&#39;</span>
+    <span class="n">pot_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">pot_dir</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">param_file</span><span class="p">)</span>
+    <span class="n">pot</span>     <span class="o">=</span> <span class="n">Potential</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mm_init_args</span><span class="p">,</span> <span class="n">param_filename</span> <span class="o">=</span> <span class="n">pot_file</span><span class="p">)</span>
+    <span class="n">unit_slab</span><span class="o">.</span><span class="n">set_calculator</span><span class="p">(</span><span class="n">pot</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">unit_slab</span></div>
+
+<div class="viewcode-block" id="CrackCell.build_surface"><a class="viewcode-back" href="../../crack.html#fracture.crack.CrackCell.build_surface">[docs]</a>  <span class="k">def</span> <span class="nf">build_surface</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">)):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create an equivalent surface unit cell for the fracture system.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">symbol</span><span class="o">==</span><span class="s1">&#39;Si&#39;</span><span class="p">:</span>
+      <span class="n">unit_slab</span> <span class="o">=</span> <span class="n">Diamond</span><span class="p">(</span><span class="n">directions</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">crack_direction</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cleavage_plane</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">crack_front</span><span class="p">],</span>
+                          <span class="n">size</span> <span class="o">=</span> <span class="n">size</span><span class="p">,</span> <span class="n">symbol</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">symbol</span><span class="p">,</span> <span class="n">pbc</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">latticeconstant</span><span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">a0</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">symbol</span><span class="o">==</span><span class="s1">&#39;Fe&#39;</span><span class="p">:</span>
+      <span class="n">unit_slab</span> <span class="o">=</span> <span class="n">BodyCenteredCubic</span><span class="p">(</span><span class="n">directions</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">crack_direction</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cleavage_plane</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">crack_front</span><span class="p">],</span>
+                               <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span> <span class="n">symbol</span><span class="o">=</span><span class="s1">&#39;Fe&#39;</span><span class="p">,</span> <span class="n">pbc</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span>
+                               <span class="n">latticeconstant</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">a0</span><span class="p">)</span>
+<span class="c1"># Does this work for more than 2 atoms?</span>
+    <span class="n">unit_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="p">(</span><span class="n">unit_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="n">unit_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span><span class="o">/</span><span class="mf">2.0</span>
+    <span class="n">unit_slab</span><span class="o">.</span><span class="n">set_scaled_positions</span><span class="p">(</span><span class="n">unit_slab</span><span class="o">.</span><span class="n">get_scaled_positions</span><span class="p">())</span>
+    <span class="n">surface</span> <span class="o">=</span> <span class="n">unit_slab</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">surface</span><span class="o">.</span><span class="n">center</span><span class="p">(</span><span class="n">vacuum</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vacuum</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">pot_dir</span>  <span class="o">=</span> <span class="s1">&#39;/Users/lambert/pymodules/imeall/imeall/potentials/&#39;</span>
+    <span class="n">pot_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">pot_dir</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">param_file</span><span class="p">)</span>
+    <span class="n">pot</span>     <span class="o">=</span> <span class="n">Potential</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mm_init_args</span><span class="p">,</span> <span class="n">param_filename</span><span class="o">=</span><span class="n">pot_file</span><span class="p">)</span>
+    <span class="n">surface</span><span class="o">.</span><span class="n">set_calculator</span><span class="p">(</span><span class="n">pot</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">surface</span></div>
+
+<div class="viewcode-block" id="CrackCell.build_crack_cell"><a class="viewcode-back" href="../../crack.html#fracture.crack.CrackCell.build_crack_cell">[docs]</a>  <span class="k">def</span> <span class="nf">build_crack_cell</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">unit_slab</span><span class="p">,</span> <span class="n">fix_dist</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates a CrackCell of the desired size and orientation</span>
+<span class="sd">    with the top and bottom layer of atoms constrained.</span>
+<span class="sd">    Returns: :class:`Atoms` - the relaxed crack_cell.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">nx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">width</span><span class="o">/</span><span class="n">unit_slab</span><span class="o">.</span><span class="n">get_cell</span><span class="p">()[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">])</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">ny</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="o">/</span><span class="n">unit_slab</span><span class="o">.</span><span class="n">get_cell</span><span class="p">()[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ny</span> <span class="o">%</span><span class="mi">2</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">ny</span> <span class="o">+=</span><span class="mi">1</span>
+    <span class="c1">#self.ny = 1</span>
+    <span class="nb">print</span> <span class="s1">&#39;number of unit cells&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ny</span>
+    <span class="n">crack_slab</span> <span class="o">=</span> <span class="n">unit_slab</span><span class="o">*</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ny</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">write</span><span class="p">(</span><span class="s1">&#39;ref_slab.xyz&#39;</span><span class="p">,</span> <span class="n">crack_slab</span><span class="p">)</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">center</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vacuum</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">center</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vacuum</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">-=</span> <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-=</span> <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">orig_width</span>  <span class="o">=</span> <span class="p">(</span><span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">-</span>
+                   <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">())</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">orig_height</span> <span class="o">=</span> <span class="p">(</span><span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">-</span>
+                   <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">())</span>
+    <span class="nb">print</span><span class="p">((</span><span class="s1">&#39;Made slab with </span><span class="si">%d</span><span class="s1"> atoms, original width and height: </span><span class="si">%.1f</span><span class="s1"> x </span><span class="si">%.1f</span><span class="s1"> A^2&#39;</span> <span class="o">%</span>
+       <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">crack_slab</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">orig_width</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">orig_height</span><span class="p">)))</span>
+    <span class="n">top</span>    <span class="o">=</span> <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+    <span class="n">bottom</span> <span class="o">=</span> <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+    <span class="n">left</span>   <span class="o">=</span> <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+    <span class="n">right</span>  <span class="o">=</span> <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+<span class="c1">#Constrain top and bottom layer of atoms:</span>
+    <span class="n">fixed_mask</span> <span class="o">=</span> <span class="p">((</span><span class="nb">abs</span><span class="p">(</span><span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">top</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">|</span>
+                  <span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">bottom</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">))</span>
+    <span class="n">const</span> <span class="o">=</span> <span class="n">FixAtoms</span><span class="p">(</span><span class="n">mask</span><span class="o">=</span><span class="n">fixed_mask</span><span class="p">)</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">set_constraint</span><span class="p">(</span><span class="n">const</span><span class="p">)</span>
+<span class="c1"># Strain is a dimensionless ratio we require elastic tensor</span>
+<span class="c1"># to translate the initial energy flow to the tip into a strain.</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">E</span>  <span class="o">=</span> <span class="n">youngs_modulus</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cij</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cleavage_plane</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">nu</span> <span class="o">=</span> <span class="n">poisson_ratio</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cij</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cleavage_plane</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">crack_direction</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">strain</span> <span class="o">=</span> <span class="n">G_to_strain</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">initial_G</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">E</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">orig_height</span><span class="p">)</span>
+    <span class="n">seed</span> <span class="o">=</span> <span class="n">left</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">crack_seed_length</span>
+    <span class="n">tip</span>  <span class="o">=</span> <span class="n">left</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">crack_seed_length</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">strain_ramp_length</span>
+    <span class="n">xpos</span> <span class="o">=</span> <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">ypos</span> <span class="o">=</span> <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">positions</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="n">thin_strip_displacement_y</span><span class="p">(</span><span class="n">xpos</span><span class="p">,</span> <span class="n">ypos</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">strain</span><span class="p">,</span> <span class="n">seed</span><span class="p">,</span> <span class="n">tip</span><span class="p">)</span>
+    <span class="n">write</span><span class="p">(</span><span class="s1">&#39;crack_slab_init.xyz&#39;</span><span class="p">,</span> <span class="n">crack_slab</span><span class="p">)</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Applied initial load: strain=</span><span class="si">%.4f</span><span class="s1">, G=</span><span class="si">%.2f</span><span class="s1"> J/m^2&#39;</span> <span class="o">%</span>
+         <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">strain</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">initial_G</span> <span class="o">/</span> <span class="p">(</span><span class="n">units</span><span class="o">.</span><span class="n">J</span> <span class="o">/</span> <span class="n">units</span><span class="o">.</span><span class="n">m</span><span class="o">**</span><span class="mi">2</span><span class="p">)))</span>
+
+    <span class="n">pot_dir</span>  <span class="o">=</span> <span class="s1">&#39;/Users/lambert/pymodules/imeall/imeall/potentials/&#39;</span>
+    <span class="n">pot_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">pot_dir</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">param_file</span><span class="p">)</span>
+    <span class="n">pot</span>      <span class="o">=</span> <span class="n">Potential</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mm_init_args</span><span class="p">,</span> <span class="n">param_filename</span><span class="o">=</span><span class="n">pot_file</span><span class="p">)</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">set_calculator</span><span class="p">(</span><span class="n">pot</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Relaxing slab...&#39;</span><span class="p">)</span>
+<span class="c1">#slab_opt = Minim(crack_slab, relax_positions=True, relax_cell=False)</span>
+<span class="c1">#slab_opt = FIRE(crack_slab) </span>
+    <span class="n">slab_opt</span> <span class="o">=</span> <span class="n">LBFGS</span><span class="p">(</span><span class="n">crack_slab</span><span class="p">)</span>
+    <span class="n">slab_opt</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">relax_fmax</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">crack_slab</span></div>
+
+  <span class="k">def</span> <span class="nf">calc_nye_tensor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+    <span class="n">x</span><span class="o">.</span><span class="n">set_cutoff</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+    <span class="n">x</span><span class="o">.</span><span class="n">calc_connect</span><span class="p">()</span>
+    <span class="n">b</span> <span class="o">=</span> <span class="n">bcc</span><span class="p">(</span><span class="mf">2.83</span><span class="p">,</span> <span class="mi">26</span><span class="p">)</span>
+    <span class="n">x0</span> <span class="o">=</span> <span class="n">supercell</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ny</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">x0</span><span class="o">.</span><span class="n">set_cutoff</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+    <span class="n">x0</span><span class="o">.</span><span class="n">calc_connect</span><span class="p">()</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="n">calc_nye_tensor</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">x0</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="n">x</span><span class="o">.</span><span class="n">n</span><span class="p">)</span>
+    <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">])</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+      <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+        <span class="n">a</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">alpha</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">,:])</span>
+    <span class="k">return</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">a</span>
+
+  <span class="k">def</span> <span class="nf">write_crack_cell</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">crack_slab</span><span class="p">,</span> <span class="n">mm_pot</span><span class="p">):</span>
+    <span class="nb">print</span> <span class="n">crack_slab</span><span class="o">.</span><span class="n">get_cell</span><span class="p">()</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;nneightol&#39;</span><span class="p">]</span>       <span class="o">=</span> <span class="mf">1.30</span> <span class="c1"># set nearest neighbour tolerance</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;LatticeConstant&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">a0</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;C11&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cij</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;C12&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cij</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;C44&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cij</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;YoungsModulus&#39;</span><span class="p">]</span>   <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">E</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;PoissonRatio_yx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nu</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;G&#39;</span><span class="p">]</span>               <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">initial_G</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;OrigWidth&#39;</span><span class="p">]</span>       <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">orig_width</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;OrigHeight&#39;</span><span class="p">]</span>      <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">orig_height</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;CrackDirection&#39;</span><span class="p">]</span>  <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">crack_direction</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;CleavagePlane&#39;</span><span class="p">]</span>   <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cleavage_plane</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;CrackFront&#39;</span><span class="p">]</span>      <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">crack_front</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;strain&#39;</span><span class="p">]</span>          <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">strain</span>
+    <span class="c1">#Initial guess for crack_pos</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;CrackPos&#39;</span><span class="p">]</span>        <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">110.</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">])</span>
+    <span class="n">crack_pos</span> <span class="o">=</span> <span class="n">find_crack_tip_stress_field</span><span class="p">(</span><span class="n">crack_slab</span><span class="p">,</span> <span class="n">calc</span><span class="o">=</span><span class="n">mm_pot</span><span class="p">)</span>
+    <span class="nb">print</span> <span class="s1">&#39;Found crack tip at position </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">crack_pos</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;CrackPos&#39;</span><span class="p">]</span>        <span class="o">=</span> <span class="n">crack_pos</span>
+    <span class="n">crack_slab</span><span class="o">.</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;is_cracked&#39;</span><span class="p">]</span>      <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">write</span><span class="p">(</span><span class="s1">&#39;crack.xyz&#39;</span><span class="p">,</span> <span class="n">crack_slab</span><span class="p">)</span></div>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+<span class="c1">#load CrackCell Dictionary</span>
+  <span class="k">try</span><span class="p">:</span>
+    <span class="n">f</span>          <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;crack_info.pckl&#39;</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span>
+    <span class="n">crack_info</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="nb">print</span> <span class="s1">&#39;Initializing crack_cell from Info File.&#39;</span>
+    <span class="n">crack</span>      <span class="o">=</span> <span class="n">CrackCell</span><span class="p">(</span><span class="o">**</span><span class="n">crack_info</span><span class="p">)</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+  <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+    <span class="nb">print</span> <span class="s1">&#39;no crack dictionary found.&#39;</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">()</span>
+  <span class="n">Grain_Boundary</span> <span class="o">=</span> <span class="kc">False</span>
+  <span class="k">if</span> <span class="ow">not</span> <span class="n">Grain_Boundary</span><span class="p">:</span>
+    <span class="n">unit_slab</span>  <span class="o">=</span> <span class="n">crack</span><span class="o">.</span><span class="n">build_unit_slab</span><span class="p">()</span>
+
+  <span class="n">pot_dir</span>  <span class="o">=</span> <span class="s1">&#39;/Users/lambert/pymodules/imeall/imeall/potentials/&#39;</span>
+  <span class="n">pot_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">pot_dir</span><span class="p">,</span> <span class="n">crack_info</span><span class="p">[</span><span class="s1">&#39;param_file&#39;</span><span class="p">])</span>
+  <span class="n">mm_pot</span>   <span class="o">=</span> <span class="n">Potential</span><span class="p">(</span><span class="s1">&#39;IP EAM_ErcolAd&#39;</span><span class="p">,</span> <span class="n">param_filename</span><span class="o">=</span><span class="n">pot_file</span><span class="p">,</span> <span class="n">cutoff_skin</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+
+<span class="c1"># gb_frac.py will generate the frac_cell.xyz file which contains </span>
+<span class="c1"># a crack_cell:</span>
+  <span class="k">if</span> <span class="n">Grain_Boundary</span><span class="p">:</span>
+    <span class="n">unit_slab</span>   <span class="o">=</span> <span class="n">Atoms</span><span class="p">(</span><span class="s1">&#39;frac_cell.xyz&#39;</span><span class="p">)</span>
+    <span class="n">unit_slab</span><span class="o">.</span><span class="n">set_calculator</span><span class="p">(</span><span class="n">mm_pot</span><span class="p">)</span>
+
+<span class="c1">#calculate the elasticity tensor:</span>
+  <span class="n">crack</span><span class="o">.</span><span class="n">calculate_c</span><span class="p">()</span>
+  <span class="n">surface</span>    <span class="o">=</span> <span class="n">crack</span><span class="o">.</span><span class="n">build_surface</span><span class="p">()</span>
+  <span class="n">E_surf</span> <span class="o">=</span> <span class="n">surface</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
+  <span class="n">bulk</span> <span class="o">=</span> <span class="n">bcc</span><span class="p">(</span><span class="mf">2.85</span><span class="p">)</span>
+  <span class="n">bulk</span><span class="o">.</span><span class="n">set_atoms</span><span class="p">(</span><span class="mi">26</span><span class="p">)</span>
+  <span class="n">bulk</span><span class="o">.</span><span class="n">set_calculator</span><span class="p">(</span><span class="n">mm_pot</span><span class="p">)</span>
+  <span class="n">E_bulk</span> <span class="o">=</span> <span class="n">bulk</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span><span class="o">/</span><span class="nb">len</span><span class="p">(</span><span class="n">bulk</span><span class="p">)</span>
+  <span class="n">area</span> <span class="o">=</span> <span class="p">(</span><span class="n">surface</span><span class="o">.</span><span class="n">get_cell</span><span class="p">()[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">surface</span><span class="o">.</span><span class="n">get_cell</span><span class="p">()[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">])</span>
+  <span class="nb">print</span> <span class="n">E_surf</span><span class="p">,</span> <span class="n">E_bulk</span>
+  <span class="n">gamma</span> <span class="o">=</span> <span class="p">(</span><span class="n">E_surf</span> <span class="o">-</span> <span class="n">E_bulk</span><span class="o">*</span><span class="nb">len</span><span class="p">(</span><span class="n">surface</span><span class="p">))</span><span class="o">/</span><span class="p">(</span><span class="mf">2.0</span><span class="o">*</span><span class="n">area</span><span class="p">)</span>
+  <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Surface energy of </span><span class="si">%s</span><span class="s1"> surface </span><span class="si">%.4f</span><span class="s1"> J/m^2</span><span class="se">\n</span><span class="s1">&#39;</span> <span class="o">%</span>
+       <span class="p">(</span><span class="n">crack</span><span class="o">.</span><span class="n">cleavage_plane</span><span class="p">,</span> <span class="n">gamma</span><span class="o">/</span><span class="p">(</span><span class="n">units</span><span class="o">.</span><span class="n">J</span><span class="o">/</span><span class="n">units</span><span class="o">.</span><span class="n">m</span><span class="o">**</span><span class="mi">2</span><span class="p">)))</span>
+  <span class="n">crack_slab</span> <span class="o">=</span> <span class="n">crack</span><span class="o">.</span><span class="n">build_crack_cell</span><span class="p">(</span><span class="n">unit_slab</span><span class="p">)</span>
+  <span class="n">crack</span><span class="o">.</span><span class="n">write_crack_cell</span><span class="p">(</span><span class="n">crack_slab</span><span class="p">,</span> <span class="n">mm_pot</span><span class="p">)</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2016, Henry Lambert.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.4.5</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.9</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
