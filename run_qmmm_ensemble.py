@@ -25,6 +25,7 @@ parser.add_argument("-jf",  "--jobfinish", type=int, default = 8)
 parser.add_argument("-npj", "--npj",  type=int, default = 128)
 parser.add_argument("-ppn", "--ppn",  type=int, default =  2)
 parser.add_argument("-c",   "--continuation", action='store_true')
+parser.add_argument("-cfe",   "--checkforce", action='store_true')
 
 args       = parser.parse_args()
 jobstart   = args.jobstart
@@ -37,6 +38,13 @@ if args.continuation:
   cont_string = '-c'
 else:
   cont_string = ''
+
+if args.checkforce:
+  cfe_string='-cfe'
+else:
+  cfe_string=''
+
+  
   
 
 acct  = 'SiO2_Fracture'
@@ -98,7 +106,7 @@ for job, (block, corner, shape) in zip(jobdirs, block_corner_iter(blocks, npj)):
 # We pass lots of arguments to the run_qmmm script that tell it what to do
 # sim temperature, check force error etc.
 # and where (i.e. which block corner shape) to do it.
-    physargs    = '-st {0} {1}'.format(300, cont_string)
+    physargs    = '-st {0} {1} {2}'.format(300, cont_string, cfe_string)
     locargs     = '--block {0} --corner {1} --shape {2}'.format(block, corner, shape)
     nodeargs    = '--npj {0} --ppn {1}'.format(npj, ppn)
     runjob_args = ('python run_qmmm_e.py {physargs} {locargs} {nodeargs} '.format(physargs=physargs, locargs=locargs, nodeargs=nodeargs)).split()
