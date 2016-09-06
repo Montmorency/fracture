@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import logging
-logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 
 import os
 import glob
@@ -35,10 +35,11 @@ from bgqtools             import (get_bootable_blocks, boot_blocks, block_corner
 
 from distribfm            import DistributedForceMixingPotential
 
+import pickle
+
 sys.path+=['.']
 
 set_fortran_indexing(False)
-
 
 def log_pred_corr_errors(dynamics, logfile):
     logline = '%s err %10.1f%12.6f%12.6f\n' % (dynamics.state_label,
@@ -140,7 +141,7 @@ def update_qm_region(atoms, dis_type='edge', cut=3.0, rr=10.0, qr=1):
 
 def update_qm_region_crack(atoms):
   """
-    Set quantum region around the crack tip.
+  Set quantum region around the crack tip.
   """
   mm_pot = Potential(mm_init_args,
                      param_filename = param_file,
@@ -162,6 +163,36 @@ def update_qm_region_crack(atoms):
   atoms.params['CrackPos'] = crack_pos
   return
 
+def set_qm_H(h_list):
+  def update_qm_region_H(atoms):
+    """
+    Set quantum region around the Hydrogen. Also records crackpos.
+    """
+    mm_pot = Potential(mm_init_args,
+                       param_filename = param_file,
+                       cutoff_skin    = cutoff_skin)
+  
+    crack_pos    = find_crack_tip_stress_field(atoms, calc=mm_pot)
+  #set quantum region to first hydrogen atom in list.
+    h_pos        = atoms[h_list[0]].position 
+    old_qm_list  = atoms.hybrid_vec.nonzero()[0]
+    new_qm_list  = update_hysteretic_qm_region(atoms, old_qm_list, h_pos, 
+                                               qm_inner_radius, 
+                                               qm_outer_radius, 
+                                               update_marks=False)
+  #lets try setting the atoms object properties by hand?
+    atoms.hybrid[:]               = 0
+    atoms.hybrid[new_qm_list]     = 1
+  #Distributed Force Mixing Properties:
+    atoms.hybrid_vec[:]           = 0
+    atoms.hybrid_vec[new_qm_list] = 1
+    atoms.hybrid_1[:]             = atoms.hybrid_vec[:]
+    atoms.params['core']          = h_pos
+    atoms.params['CrackPos']      = crack_pos
+    return
+  return update_qm_region_H
+  
+
 if __name__=='__main__':
   do_timing    = False
   do_verbose = False
@@ -176,6 +207,8 @@ if __name__=='__main__':
   parser.add_argument("-st",  "--sim_T", help='Simulation Temperature in Kelvin. Default is 300 K.', type=float, required=True)
   parser.add_argument("-cfe", "--check_force_error", help='Perform a DFT calculation at each step in the trajectory.', action='store_true')
   parser.add_argument("-c",   "--continuation" , action="store_true")
+#********** QUANTUM REGION ARGUMENTS ****************#
+  parser.add_argument("-qr",   "--quantum_region", help="Quantum region to track if crack, QR placed at crack tip, if hydrogen QR placed on hydrogen(s).", default="crack")
 # ********** Parallel Arguments  ************ #
   parser.add_argument("--block")
   parser.add_argument("--corner")
@@ -208,6 +241,12 @@ if __name__=='__main__':
   traj_file    = '%s.traj.xyz'        # Trajectory output file
 
   rundir = os.getcwd()
+
+  #load parameter_file
+  with open("crack_info.pckl", "r") as f:
+    crack_dict = pickle.load(f)
+
+  sim_T = crack_dict['sim_T']*units.kB
 
   try:
     pot_dir      = os.environ['POTDIR']
@@ -276,11 +315,24 @@ if __name__=='__main__':
       traj_files = sorted(glob.glob('[0-9]*.traj.xyz'))
       if len(traj_files) > 0:
           last_traj = traj_files[-1]
-          input_file = last_traj + '@-1'
+          input_file = last_traj #+ '@-1'
 
   print 'Loading atoms from file %s' % input_file
   atoms = Atoms(input_file)
   atoms = Atoms(atoms)
+
+# If hydrogen simulation we may want to keep track of where hydrogen is and center the quantum zone there.
+  h_list = []
+  for at in atoms:
+    if at.number==1:
+      h_list.append(at.index)
+  print "Hydrogen list:", h_list
+
+# For now we track the hydrogen in the quantum region:
+  if h_list == []:
+    quantumregion = 'Crack'
+  else:
+    quantumregion = 'Hydrogen'
   
   # loading reference configuration for Nye tensor evaluation
   # convert to quippy Atoms - FIXME in long term, this should not be necesary
@@ -346,33 +398,70 @@ if __name__=='__main__':
       if geom =='disloc':
         atoms  = set_quantum_disloc(atoms)
       elif geom=='crack':
-        mom   = [3.0 for at in range(len(atoms))]
-        atoms.set_initial_magnetic_moments(mom)
-        atoms.add_property('hybrid', 0, overwrite=True)
-        atoms.add_property('hybrid_vec', 0, overwrite=True)
-        atoms.add_property('hybrid_1', 0)
-        atoms.add_property('hybrid_mark_1', 0)
-        crackpos = atoms.info['CrackPos']
-        qm_list_old = []
-        qm_list   = update_hysteretic_qm_region(atoms, [], crackpos, qm_inner_radius,
-                                                qm_outer_radius,
-                                                update_marks=False)
-        atoms.hybrid[qm_list]     = HYBRID_ACTIVE_MARK
-        atoms.hybrid_vec[qm_list] = HYBRID_ACTIVE_MARK
-        atoms.hybrid_1[qm_list]   = HYBRID_ACTIVE_MARK
-        atoms.hybrid_mark_1[qm_list] = HYBRID_ACTIVE_MARK
-        atoms.params['core'] = crackpos
-        print HYBRID_ACTIVE_MARK
-        print 'Core Found. No. Quantum Atoms:', sum(atoms.hybrid[:])
+        if quantumregion == 'Crack':
+          mom   = [3.0 for at in range(len(atoms))]
+          atoms.set_initial_magnetic_moments(mom)
+          atoms.add_property('hybrid', 0, overwrite=True)
+          atoms.add_property('hybrid_vec', 0, overwrite=True)
+          atoms.add_property('hybrid_1', 0)
+          atoms.add_property('hybrid_mark_1', 0)
+          crackpos = atoms.info['CrackPos']
+          qm_list_old = []
+          qm_list   = update_hysteretic_qm_region(atoms, [], crackpos, qm_inner_radius,
+                                                  qm_outer_radius,
+                                                  update_marks=False)
+          atoms.hybrid[qm_list]     = HYBRID_ACTIVE_MARK
+          atoms.hybrid_vec[qm_list] = HYBRID_ACTIVE_MARK
+          atoms.hybrid_1[qm_list]   = HYBRID_ACTIVE_MARK
+          atoms.hybrid_mark_1[qm_list] = HYBRID_ACTIVE_MARK
+          atoms.params['core'] = crackpos
+          print HYBRID_ACTIVE_MARK
+          print 'Core Found. No. Quantum Atoms:', sum(atoms.hybrid[:])
+        elif quantumregion == 'Hydrogen':
+          mom   = [3.0 for at in range(len(atoms))]
+          atoms.set_initial_magnetic_moments(mom)
+          atoms.add_property('hybrid',        0, overwrite=True)
+          atoms.add_property('hybrid_vec',    0, overwrite=True)
+          atoms.add_property('hybrid_1',      0, overwrite=True)
+          atoms.add_property('hybrid_mark_1', 0, overwrite=True)
+          h_pos       = atoms[h_list[0]].position
+          print "hydrogen_position", h_pos
+          qm_list_old = []
+          qm_list     = update_hysteretic_qm_region(atoms, [], h_pos, qm_inner_radius,
+                                                    qm_outer_radius,
+                                                    update_marks=False)
+          atoms.hybrid[qm_list]        = HYBRID_ACTIVE_MARK
+          atoms.hybrid_vec[qm_list]    = HYBRID_ACTIVE_MARK
+          atoms.hybrid_1[qm_list]      = HYBRID_ACTIVE_MARK
+          atoms.hybrid_mark_1[qm_list] = HYBRID_ACTIVE_MARK
+          atoms.params['core'] = h_pos
+          crackpos = atoms.info['CrackPos']
+          print HYBRID_ACTIVE_MARK
+          print 'Core Found. No. Quantum Atoms:', sum(atoms.hybrid[:])
+        else:
+          sys.exit("something wrong.")
       else:
         print 'No cell geometry given, specifiy either disloc or crack', 1/0 
   
 # ********* Setup and run MD ***********
 # Set the initial temperature to 2*simT: it will then equilibriate to
-# simT, by the virial theorem
-  if not continuation and rescale_velo:
+# simT, by the virial theorem.
+#
+  if rescale_velo:
     np.random.seed(42) # use same random seed each time to be deterministic 
-    MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)
+    if 'thermalized' not in crack_dict.keys():
+      MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)
+      crack_dict['thermalized'] = True
+    elif crack_dict['thermalized'] == False:
+      MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)
+      crack_dict['thermalized'] = True
+    else:
+      pass
+
+# Now keep a record if this crack cell has been thermalized:
+    with open("crack_info.pckl", "w") as f:
+      pickle.dump(crack_dict,f)
+
 # Save frames to the trajectory every `traj_interval` time steps.
   trajectory = AtomsWriter(os.path.join(rundir, traj_file))
 # Initialise the dynamical system
@@ -400,7 +489,12 @@ if __name__=='__main__':
       if geom =='disloc':
         dynamics.set_qm_update_func(update_qm_region)
       elif geom =='crack':
-        dynamics.set_qm_update_func(update_qm_region_crack)
+        if quantumregion == 'Crack':
+          dynamics.set_qm_update_func(update_qm_region_crack)
+        elif quantumregion =='Hydrogen':
+          dynamics.set_qm_update_func(set_qm_H(h_list))
+        else:
+          sys.exit("No quantum region chosen")
       else:
         print 'No geometry chosen', 1/0
   
