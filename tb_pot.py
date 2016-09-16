@@ -8,7 +8,11 @@ from ase.lattice.cubic import BodyCenteredCubic
 from quippy import Potential, BOHR
 
 class TightBindingPot(object):
-  def __init__(self, alat=2.87, nk=16, n=2):
+  """
+  Interface to the lmto-tb code. Contains the input
+  file and a routine for writing the ctrl.{atom} file.
+  """
+  def __init__(self, alat=2.83, nk=4, n=4):
     self.alat = alat # lattice constant, angstrom
     self.nk   = nk   # number of k-points along cubic axes
     self.n    = n    # we use an n x n x n supercell of primitive cell
