@@ -18,27 +18,53 @@ set_unbuffered_stdout()
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("-npj", "--npj",  type=int,  default = 64)
-parser.add_argument("-ppn", "--ppn",  type=int,  default =  4)
-parser.add_argument("-t",   "--time", type=int,  default = 60)
-parser.add_argument("-jp",  "--jobpattern",      default = 'T3*')
+parser.add_argument("-t",   "--time", type=int, default = 60)
+parser.add_argument("-jp",  "--jobpattern",     default = 'T3*')
+parser.add_argument("-js",  "--jobstart", type=int, default  = 0)
+parser.add_argument("-jf",  "--jobfinish", type=int, default = 8)
+parser.add_argument("-npj", "--npj",  type=int, default = 128)
+parser.add_argument("-ppn", "--ppn",  type=int, default =  2)
+parser.add_argument("-c",   "--continuation", action='store_true')
+parser.add_argument("-cfe",   "--checkforce", action='store_true')
 
-args = parser.parse_args()
+args       = parser.parse_args()
+jobstart   = args.jobstart
+jobfinish  = args.jobfinish
+jobpattern = args.jobpattern
+npj        = args.npj # nodes per job
+ppn        = args.ppn # MPI tasks per node
+
+if args.continuation:
+  cont_string = '-c'
+else:
+  cont_string = ''
+
+if args.checkforce:
+  cfe_string='-cfe'
+else:
+  cfe_string=''
+
+  
+  
 
 acct  = 'SiO2_Fracture'
-time  = 60
+time  = args.time
 queue = 'default'
 mapping = 'ABCDET'
 scratch = os.getcwd()
 vasp    = '/projects/SiO2_Fracture/iron/vasp.bgq'
 envargs = '--envs RUNJOB_MAPPING=%s --envs MPIRUN_ENABLE_TTY_REPORTING=0' % mapping
-npj     = 64 # nodes per job
-ppn     = 4 # MPI tasks per node
 
 hostname = socket.gethostname()
 print 'Hostname: %s' % hostname
 
-jobdirs = glob.glob('T3*')[4:6]
+#The submit resubmit pattern means the shell will strip the quotes from the
+#job pattern in order to not have wild cards expanded in the shell we need the quotes
+#by double enclosing the quotes we protect it from the wildcard expand then
+#we strip the extra quotes to find the directors and determine the nodes
+#then when subprocess resubmits this script the quotes are again included so when qsub
+#executes the script we have the pattern enclosed in quotes '"pattern"'
+jobdirs = glob.glob(jobpattern.replace("\"",''))[jobstart:jobfinish]
 
 print 'jobdirs = %s' % jobdirs
 
@@ -47,9 +73,11 @@ nodes = npj*njobs
 
 if 'COBALT_PARTSIZE' not in os.environ:
     print 'Not running under control of cobalt. Launching qsub...'
-    qsub_args = 'qsub -A %s -n %d -t %d -q %s --mode script --disable_preboot %s' % (acct, nodes, time, queue, ' '.join(sys.argv))
+    qsub_args = 'qsub -A {acct} -n {nodes} -t {time} -q {queue} --mode script --disable_preboot {script} {flags}'.format(acct=acct, 
+                        nodes=nodes, time=time, queue=queue, script=sys.argv[0], flags=' '.join(sys.argv[1:]))
     print qsub_args
-    os.system(qsub_args)
+    job = subprocess.Popen(qsub_args.split())
+    job.wait()
     sys.exit(1)
 
 partsize  = int(os.environ['COBALT_PARTSIZE'])
@@ -78,7 +106,7 @@ for job, (block, corner, shape) in zip(jobdirs, block_corner_iter(blocks, npj)):
 # We pass lots of arguments to the run_qmmm script that tell it what to do
 # sim temperature, check force error etc.
 # and where (i.e. which block corner shape) to do it.
-    physargs    = '-st {0} -cfe'.format(300)
+    physargs    = '-st {0} {1} {2}'.format(300, cont_string, cfe_string)
     locargs     = '--block {0} --corner {1} --shape {2}'.format(block, corner, shape)
     nodeargs    = '--npj {0} --ppn {1}'.format(npj, ppn)
     runjob_args = ('python run_qmmm_e.py {physargs} {locargs} {nodeargs} '.format(physargs=physargs, locargs=locargs, nodeargs=nodeargs)).split()
