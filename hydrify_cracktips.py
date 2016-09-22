@@ -5,7 +5,9 @@ import argparse
 import numpy as np
 import scipy.spatial as spatial
 
-from   quippy import Atoms
+from   quippy import Atoms, set_fortran_indexing
+
+set_fortran_indexing(False)
 
 class Hydrify(object):
   """"
@@ -42,6 +44,10 @@ class Hydrify(object):
       ats.add_atoms([109.17,-1.11,4.275],1)
       ats.set_atoms(cr.numbers)
 
+  def write_cluster(self, cl,name='cluster.xyz'):
+    cl.center(vacuum=2.0)
+    cl.write(name)
+
   def add_h_smart(self, ats, position=np.array([0.0,0.0,0.0]),rr=7.0,n_h=1):
     """
     Given a position try to add the hydrogen in a "nice"
@@ -49,28 +55,40 @@ class Hydrify(object):
     """
 # First take a small selection of atoms around the crack tip
     ats.calc_connect(2.5)
-    fixed_mask = (np.sqrt(sum(map(np.square,(ats.positions[:,0:3]-ats.params['CrackPos'][:])))) < rr)
-    cl         = ats.select(fixed_mask)
+    fixed_mask = (np.sqrt(map(sum, map(np.square, ats.positions[:,0:3]-ats.params['CrackPos'][0:3]))) <= rr)
+    cl         = ats.select(fixed_mask, orig_index=True)
+    self.write_cluster(cl.copy(), name = 'cluster.xyz')
 #  Then compute voronoi diagram and add hydrogens around there:
-    vor        = spatial.Voronoi(cl.positions, furthest_site=True)
-    for i in range(n_h):
+    vor        = spatial.Voronoi(cl.positions, furthest_site=False)
+    f = open('furthest_site.dat', 'w')
+    g = open('fe_sites.dat', 'w')
+    #for i in range(n_h):
+    for i in range(len(vor.vertices)):
       ats.add_atoms(vor.vertices[i], 1)
-
+    for pos in vor.vertices:
+      print >> f, pos
+    fixed_mask = (np.sqrt(map(sum, map(np.square, ats.positions[:,0:3]-ats.params['CrackPos'][0:3]))) <= rr)
+    cl         = ats.select(fixed_mask)
+    self.write_cluster(cl.copy(), name = 'clusterH.xyz')
+    for pos in cl.positions:
+      print >> g, pos
+    f.close()
+    g.close()
 
 if __name__=='__main__':
   parser  = argparse.ArgumentParser()
-  parser.add_argument('-p','--pattern', default="nopattern")
+  parser.add_argument('-p','--pattern', default="thermalized.xyz")
   args    = parser.parse_args()
   pattern = args.pattern
 
-  jobs = glob.glob(pattern+"*xyz")
+  jobs = glob.glob(pattern)
+  print jobs
   hydrify =  Hydrify()
-
   for job in jobs:
     ats = Atoms(job)
     print job
     print len(ats)
     print ats.params['CrackPos']
     hydrify.add_h_smart(ats, position=[ats.params['CrackPos']])
-    ats.write('thermalizedH.xyz')
+    ats.write('thermalizedHtest.xyz')
 
