@@ -210,21 +210,49 @@ if __name__=='__main__':
 #********** QUANTUM REGION ARGUMENTS ****************#
   parser.add_argument("-qr",   "--quantum_region", help="Quantum region to track if crack, QR placed at crack tip, if hydrogen QR placed on hydrogen(s).", default="crack")
 # ********** Parallel Arguments  ************ #
-  parser.add_argument("--block")
-  parser.add_argument("--corner")
-  parser.add_argument("--shape")
-  parser.add_argument("--npj")
-  parser.add_argument("--ppn")
+  parser.add_argument("--block", default='0')
+  parser.add_argument("--corner", default='0')
+  parser.add_argument("--shape", default='0')
+  parser.add_argument("--npj", type=int,  default=128)
+  parser.add_argument("--ppn", type=int,  default=4)
+  parser.add_argument("-t", "--time", type=int,  default=60)
 # parse args string:
   args              = parser.parse_args()
   sim_T             = args.sim_T*units.kB
   geom              = args.geom
   check_force_error = args.check_force_error
+  nodes = args.npj
+  walltime  = args.time
 # COBALT CONFIGURATION
   vasp  = '/projects/SiO2_Fracture/iron/vasp.bgq'
-  block  = args.block
-  corner = args.corner
-  shape  = args.shape
+
+  if 'COBALT_PARTSIZE' in os.environ:
+#This job is already submitted and running as part of an ensemble
+    pass
+  else:
+    queue = 'default'
+    acct  = 'SiO2_Fracture'
+    qsub_args = 'qsub -A %s -n %d -t %d -q %s --mode script --disable_preboot %s' % (acct, nodes, walltime, queue, ' '.join(sys.argv))
+    print qsub_args
+    os.system(qsub_args)
+    sys.exit(1)
+
+  if args.block !='0':
+    block  = args.block
+    corner = args.corner
+    shape  = args.shape
+  else:
+#no block information available need to grab this.
+    partsize  = int(os.environ['COBALT_PARTSIZE'])
+    partition = os.environ['COBALT_PARTNAME']
+    jobid     = int(os.environ['COBALT_JOBID'])
+    blocks    = get_bootable_blocks(partition, nodes)
+    print 'Available blocks: %s' % blocks
+    boot_blocks(blocks)
+    print block_corner_iter(blocks, nodes)
+    for b, c, s in block_corner_iter(blocks,nodes):
+      block, corner, shape = b, c, s
+#Running this script on it's own so need to boot blocks
   npj    = int(args.npj)
   ppn    = int(args.ppn)
   hostname, ip = get_hostname_ip()
@@ -260,8 +288,8 @@ if __name__=='__main__':
                                    # classical potential
 
 # ADDITIONAL PARAMETERS FOR THE QM/MM simulation:
-  qm_inner_radius   = 3.0*units.Ang # Inner hysteretic radius for QM region
-  qm_outer_radius   = 5.0*units.Ang # Outer hysteretic radius for QM region
+  qm_inner_radius   = 3.2*units.Ang # Inner hysteretic radius for QM region
+  qm_outer_radius   = 5.2*units.Ang # Outer hysteretic radius for QM region
   hyst_buffer_inner = 7.0 # Inner hysteretic radius for QM region
   hyst_buffer_outer = 9.0 # Outer hysteretic radius for QM region
   extrapolate_steps = 5   # Number of steps for predictor-corrector

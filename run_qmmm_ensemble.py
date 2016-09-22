@@ -15,17 +15,16 @@ from bgqtools import (get_bootable_blocks, boot_blocks, block_corner_iter,
 
 set_unbuffered_stdout()
 
-
 parser = argparse.ArgumentParser()
 
 parser.add_argument("-t",   "--time", type=int, default = 60)
-parser.add_argument("-jp",  "--jobpattern",     default = 'T3*')
-parser.add_argument("-js",  "--jobstart", type=int, default  = 0)
-parser.add_argument("-jf",  "--jobfinish", type=int, default = 8)
+parser.add_argument("-jp",  "--jobpattern", default = 'T3*')
+parser.add_argument("-js",  "--jobstart",   type=int, default  = 0)
+parser.add_argument("-jf",  "--jobfinish",  type=int, default = 8)
 parser.add_argument("-npj", "--npj",  type=int, default = 128)
 parser.add_argument("-ppn", "--ppn",  type=int, default =  2)
 parser.add_argument("-c",   "--continuation", action='store_true')
-parser.add_argument("-cfe",   "--checkforce", action='store_true')
+parser.add_argument("-cfe", "--checkforce",   action='store_true')
 
 args       = parser.parse_args()
 jobstart   = args.jobstart
@@ -43,9 +42,6 @@ if args.checkforce:
   cfe_string='-cfe'
 else:
   cfe_string=''
-
-  
-  
 
 acct  = 'SiO2_Fracture'
 time  = args.time
