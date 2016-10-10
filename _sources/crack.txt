@@ -1,6 +1,6 @@
 Crack Object
 ============
-The central object is the :class:CrackCell object defined in crack.py. This
+The central object is the :class:CrackCell_ object defined in crack.py. This
 object defines the crack cell geometry, the initial energy flow to the crack
 tip, and the type of potential to be used.
 
