@@ -9,12 +9,14 @@ Welcome to fracture's documentation!
 
 `fracture` is a collection of classes and methods
 for performing ab initio fracture simulations using the 
-[QUIP](https://libatoms.github.io/QUIP/quippy.html) package.
+QUIP (https://libatoms.github.io/QUIP/quippy.html) package.
 
 Contents
 ========
+
 .. toctree::
    :maxdepth: 2
+
    distribfm.rst
    crack.rst
 
