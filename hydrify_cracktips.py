@@ -48,18 +48,22 @@ class Hydrify(object):
     cl.center(vacuum=2.0)
     cl.write(name)
 
-  def add_h_smart(self, ats, position=np.array([0.0,0.0,0.0]),rr=7.0,n_h=1):
+  def add_h_smart(self, ats, position=np.array([0.0,0.0,0.0]),rr=10.0,n_h=1):
     """
     Given a position try to add the hydrogen in a "nice"
     place. rr is radius of clust
     """
 # First take a small selection of atoms around the crack tip
     ats.calc_connect(2.5)
-    fixed_mask = (np.sqrt(map(sum, map(np.square, ats.positions[:,0:3]-ats.params['CrackPos'][0:3]))) <= rr)
+    h_pos = np.array([118.032, 2.55, 2.78])
+    fixed_mask = (np.sqrt(map(sum, map(np.square, ats.positions[:,0:3]-h_pos[0:3]))) <= rr)
+    #fixed_mask = (np.sqrt(map(sum, map(np.square, ats.positions[:,0:3]-ats.params['CrackPos'][0:3]))) <= rr)
     cl         = ats.select(fixed_mask, orig_index=True)
     self.write_cluster(cl.copy(), name = 'cluster.xyz')
+    1/0
 #  Then compute voronoi diagram and add hydrogens around there:
     vor        = spatial.Voronoi(cl.positions, furthest_site=False)
+    delaunay   = spatial.Delaunay(cl.positions, furthest_site=False)
     f = open('furthest_site.dat', 'w')
     g = open('fe_sites.dat', 'w')
     #for i in range(n_h):
@@ -77,7 +81,7 @@ class Hydrify(object):
 
 if __name__=='__main__':
   parser  = argparse.ArgumentParser()
-  parser.add_argument('-p','--pattern', default="thermalized.xyz")
+  parser.add_argument('-p','--pattern', default="1.traj.xyz")
   args    = parser.parse_args()
   pattern = args.pattern
 
@@ -90,5 +94,6 @@ if __name__=='__main__':
     print len(ats)
     print ats.params['CrackPos']
     hydrify.add_h_smart(ats, position=[ats.params['CrackPos']])
+    #hydrify.add_h_smart(ats, position=[h_pos])
     ats.write('thermalizedHtest.xyz')
 
