@@ -17,6 +17,13 @@ class Hydrify(object):
   class:Hydrify contains methods for adding hydrogens at specific positions in a 
   simulation cell.
   """ 
+  def tetravol(self, a,b,c,d):
+    """
+    Calculates the volume of a tetrahedron, given vertices a,b,c and d (triplets)
+    """
+    tetravol=abs(np.dot((a-d),np.cross((b-d),(c-d))))/6
+    return tetravol
+
   def hydrify_multi_dirs(self, jobs, crack_pos):
     """
     Create new directories which mimic the original
@@ -81,22 +88,27 @@ class Hydrify(object):
     f.close()
     g.close()
 
-  def append_if_thresh(self, h_pos):
+  def append_if_thresh(self, h_pos, rcut = 1.6):
     """
     add position vector to list if it is greater than a specified distance from existing
     vectoras
     """
     pared_h = h_pos[0]
     for h in h_pos[1:]:
-      if all([np.linalg.norm(h-h_unique) > 1.6 for h_unique in pared_h]):
+      if all([np.linalg.norm(h-h_unique) > rcut for h_unique in pared_h]):
         pared_h =  np.vstack((pared_h, h))
     return pared_h
 
-  def hydrogenate_gb(self, gb, bp=np.array([1.,9.,0.]), d_plane=2.83, d_H=1.0, tetrahedral=True, n_H=8, alat=2.83):
+  def hydrogenate_gb(self, gb, bp=np.array([1.,9.,0.]), d_plane=2.83, d_H=1.0, tetrahedral=True, n_H=1.4, alat=2.83):
     """
     Given a grain boundary, find a bulk plane to dump hydrogen in,
     and a platelet of hydrogen parallel to the grain boundary. Routine
     returns positions of a suitable "plane" +/- 2A.
+    attributes:
+      n_H     := Nearest neighbour threshold for hydrogen atoms. Effectively determines the platelet concentration, 
+      d_plane := width of planar slice of bulk to cut out for Delaunay Triangulation
+      d_H     := distance threshold for the hydrogen from the mid-point
+      bp      := boundary plane
     """
     z_bulk     = gb.lattice[2,2]/2.0
 # Select the bulk plane:
@@ -156,15 +168,19 @@ class Hydrify(object):
         #tetra.append(t)
 #loop over octahedral sites decorating cluster
       print tetra
+      h_list = []
       for h in oct_sites:
         for lat in tetra:
           h_pos = h + lat
-          cl.add_atoms(h_pos,1)
+          h_list.append(h_pos)
+      h_list = self.append_if_thresh(h_list, rcut = 2.54)
+      for h_pos in h_list:
+        cl.add_atoms(h_pos,1)
     else:
       for h in oct_sites:
         cl.add_atoms(h,1)
     cl.write('hydrogenated_tetrahedral.xyz')
-    return
+    return h_list
 
 if __name__=='__main__':
   parser  = argparse.ArgumentParser()
