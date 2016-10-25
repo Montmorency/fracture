@@ -5,7 +5,10 @@ import argparse
 import numpy as np
 import scipy.spatial as spatial
 
-from   quippy import Atoms, set_fortran_indexing
+from ase.geometry import get_duplicate_atoms
+from quippy import Atoms, set_fortran_indexing
+from imeall.slabmaker.slabmaker import rotate_vec
+from imeall.slabmaker import transformations as quat
 
 set_fortran_indexing(False)
 
@@ -78,14 +81,18 @@ class Hydrify(object):
     f.close()
     g.close()
 
-  def append_if_thresh(h_pos):
+  def append_if_thresh(self, h_pos):
+    """
+    add position vector to list if it is greater than a specified distance from existing
+    vectoras
+    """
     pared_h = h_pos[0]
     for h in h_pos[1:]:
       if all([np.linalg.norm(h-h_unique) > 1.6 for h_unique in pared_h]):
         pared_h =  np.vstack((pared_h, h))
     return pared_h
 
-  def hydrogenate_gb(self, gb, d=2.0, n_H=8):
+  def hydrogenate_gb(self, gb, bp=np.array([1.,9.,0.]), d_plane=2.83, d_H=1.0, tetrahedral=True, n_H=8, alat=2.83):
     """
     Given a grain boundary, find a bulk plane to dump hydrogen in,
     and a platelet of hydrogen parallel to the grain boundary. Routine
@@ -93,12 +100,12 @@ class Hydrify(object):
     """
     z_bulk     = gb.lattice[2,2]/2.0
 # Select the bulk plane:
-    fixed_mask = (np.sqrt(np.square(gb.positions[:,2]-z_bulk)) <= d)
+    fixed_mask = (np.sqrt(np.square(gb.positions[:,2]-z_bulk)) <= d_plane)
     cl         = gb.select(fixed_mask, orig_index=True)
     cl.write('plane.xyz')
-    delaunay   = spatial.Delaunay(cl.positions, furthest_site=False)
+    tri   = spatial.Delaunay(cl.positions, furthest_site=False)
 #http://stackoverflow.com/questions/10650645/python-calculate-voronoi-tesselation-from-scipys-delaunay-triangulation-in-3d?rq=1
-    p = tri.points[tri.vertices]
+    p = tri.points[tri.vertices] 
     A = p[:,0,:].T
     B = p[:,1,:].T
     C = p[:,2,:].T
@@ -121,14 +128,42 @@ class Hydrify(object):
 #need the circumcenters
 #We want to append hydrogens at unique sites in the circumcenters.
 #This list has the circumcenters for lots of different simplices
+#so we removed them
     cc = cross2(sq2(a) * b - sq2(b) * a, a, b) / (2*ncross2(a, b)) + C
     plane_cc = cc.T
-    h_pos=filter(lambda x: np.sqrt(np.square(x[2]-z_bulk)) <= d, plane_cc)
-#so we removed them
-    h_pos = append_if_thresh(h_pos)
-    for h in h_pos:
-      cl.add_atoms(h,1)
-    cl.write('hydrogenated_grain')
+    oct_sites=filter(lambda x: np.sqrt(np.square(x[2]-z_bulk)) <= d_H, plane_cc)
+    oct_sites = self.append_if_thresh(oct_sites)
+    if tetrahedral:
+      #tetra_lattice = alat*np.array([[0.0,-0.25,0],[0,0,-0.25],[0.0, 0.25,0.0], [0.0,0.0,0.25]])
+      tetra_lattice = alat*np.array([[0,0,-0.25], [0.0,0.0,0.25]])
+#Depending on orientation of the unit cell we rotate the lattice
+#so that the addition of a vector from tetra_lattice is in the new x,y,z coordinate system.
+#i.e. we move from ([0,0,1], [0,1,0] ,[0,0,1]) for 001 oriented grain boundaries this is just a rotation
+#in the y-z plane. Other wise it is slightly more complicated. We rotate the x-coordinate [1,0,0]
+#to the new orientation axis (1,1,0) or (1,1,1) and then rotate y,z to the bpxv, and z =bp (i.e.
+#boundary plane and  boundary plane crossed witht the orientation axis.
+      tetra = []
+      #the orientation axis is actually or = [0,0,1] so the z coordinate wrt to the boundary plane
+      #is actually the "x coordinate". Hence we dot the boundary plane with x. however the angle is same and when 
+      #in the gb cell the orientation is along x,y,z as expected. So we take the angle from dotting [1,0,0]
+      #and then rotate lattice vectors in to x,y',z'.
+      z = np.array([0.,1., 0.])
+      theta = np.arccos(bp.dot(z)/(np.linalg.norm(bp)*(np.linalg.norm(z))))
+      print 'Rotating z by: ', (180/np.pi)*theta
+      rot_quat = quat.quaternion_about_axis(-theta, np.array([1,0,0]))
+      for t in tetra_lattice:
+        tetra.append(rotate_vec(rot_quat,t))
+        #tetra.append(t)
+#loop over octahedral sites decorating cluster
+      print tetra
+      for h in oct_sites:
+        for lat in tetra:
+          h_pos = h + lat
+          cl.add_atoms(h_pos,1)
+    else:
+      for h in oct_sites:
+        cl.add_atoms(h,1)
+    cl.write('hydrogenated_tetrahedral.xyz')
     return
 
 if __name__=='__main__':
