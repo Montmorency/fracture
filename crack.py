@@ -24,7 +24,6 @@ from   quippy.crack import print_crack_system, G_to_strain,\
                             find_crack_tip_stress_field
 
 from quippy import bcc, calc_nye_tensor, Atoms, supercell
-#from qlab import view, aux_property_coloring
 
 import os
 import numpy as np
@@ -261,9 +260,8 @@ class CrackCell(object):
     pot      = Potential(self.mm_init_args, param_filename=pot_file)
     crack_slab.set_calculator(pot)
     print('Relaxing slab...')
-#slab_opt = Minim(crack_slab, relax_positions=True, relax_cell=False)
-#slab_opt = FIRE(crack_slab) 
-    slab_opt = LBFGS(crack_slab)
+    slab_opt = FIRE(crack_slab) 
+   # slab_opt = LBFGS(crack_slab)
     slab_opt.run(fmax=self.relax_fmax)
     return crack_slab
 
@@ -316,7 +314,9 @@ if __name__ == '__main__':
   except IOError:
     print 'no crack dictionary found.'
     sys.exit()
+
   Grain_Boundary = False
+
   if not Grain_Boundary:
     unit_slab  = crack.build_unit_slab()
 

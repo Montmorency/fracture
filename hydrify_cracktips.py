@@ -20,6 +20,8 @@ class Hydrify(object):
   def tetravol(self, a,b,c,d):
     """
     Calculates the volume of a tetrahedron, given vertices a,b,c and d (triplets)
+    http://cs.smith.edu/~orourke/books/compgeom.html
+    http://stackoverflow.com/questions/19634993/volume-of-voronoi-cell-python
     """
     tetravol=abs(np.dot((a-d),np.cross((b-d),(c-d))))/6
     return tetravol
@@ -68,18 +70,16 @@ class Hydrify(object):
     h_pos = np.array([118.032, 2.55, 2.78])
     fixed_mask = (np.sqrt(map(sum, map(np.square, ats.positions[:,0:3]-h_pos[0:3]))) <= rr)
     cl         = ats.select(fixed_mask, orig_index=True)
-    self.write_cluster(cl.copy(), name = 'cluster.xyz')
-    1/0
+#   self.write_cluster(cl.copy(), name = 'cluster.xyz')
 #  Then compute voronoi diagram and add hydrogens around there:
     vor        = spatial.Voronoi(cl.positions, furthest_site=False)
     delaunay   = spatial.Delaunay(cl.positions, furthest_site=False)
-    f = open('furthest_site.dat', 'w')
-    g = open('fe_sites.dat', 'w')
+#    f = open('furthest_site.dat', 'w')
+#    g = open('fe_sites.dat', 'w')
     #for i in range(n_h):
     for vert in vor.vertices:
       ats.add_atoms(vert, 1)
-    for pos in vor.vertices:
-      print >> f, pos
+
     fixed_mask = (np.sqrt(map(sum, map(np.square, ats.positions[:,0:3]-ats.params['CrackPos'][0:3]))) <= rr)
     cl         = ats.select(fixed_mask)
     self.write_cluster(cl.copy(), name = 'clusterH.xyz')
@@ -99,20 +99,20 @@ class Hydrify(object):
         pared_h =  np.vstack((pared_h, h))
     return pared_h
 
-  def hydrogenate_gb(self, gb, bp=np.array([1.,9.,0.]), d_plane=2.83, d_H=1.0, tetrahedral=True, n_H=1.4, alat=2.83):
+  def hydrogenate_gb(self, gb, z_plane=None, bp=np.array([1.,9.,0.]), d_plane=2.83, d_H=1.0, tetrahedral=True, alat=2.83):
     """
     Given a grain boundary, find a bulk plane to dump hydrogen in,
     and a platelet of hydrogen parallel to the grain boundary. Routine
     returns positions of a suitable "plane" +/- 2A.
     attributes:
-      n_H     := Nearest neighbour threshold for hydrogen atoms. Effectively determines the platelet concentration, 
+      d_H     := Nearest neighbour threshold for hydrogen atoms. Effectively determines the platelet concentration, 
       d_plane := width of planar slice of bulk to cut out for Delaunay Triangulation
-      d_H     := distance threshold for the hydrogen from the mid-point
       bp      := boundary plane
     """
-    z_bulk     = gb.lattice[2,2]/2.0
+    if z_plane == None:
+      z_plane     = gb.lattice[2,2]/2.0
 # Select the bulk plane:
-    fixed_mask = (np.sqrt(np.square(gb.positions[:,2]-z_bulk)) <= d_plane)
+    fixed_mask = (np.sqrt(np.square(gb.positions[:,2]-z_plane)) <= d_plane)
     cl         = gb.select(fixed_mask, orig_index=True)
     cl.write('plane.xyz')
     tri   = spatial.Delaunay(cl.positions, furthest_site=False)
@@ -143,11 +143,13 @@ class Hydrify(object):
 #so we removed them
     cc = cross2(sq2(a) * b - sq2(b) * a, a, b) / (2*ncross2(a, b)) + C
     plane_cc = cc.T
-    oct_sites=filter(lambda x: np.sqrt(np.square(x[2]-z_bulk)) <= d_H, plane_cc)
+    oct_sites=filter(lambda x: np.sqrt(np.square(x[2]-z_plane)) <= 1.0, plane_cc)
     oct_sites = self.append_if_thresh(oct_sites)
+
     if tetrahedral:
       #tetra_lattice = alat*np.array([[0.0,-0.25,0],[0,0,-0.25],[0.0, 0.25,0.0], [0.0,0.0,0.25]])
-      tetra_lattice = alat*np.array([[0,0,-0.25], [0.0,0.0,0.25]])
+      #tetra_lattice = alat*np.array([[0,0,-0.25], [0.0,0.0,0.25]])
+      tetra_lattice = alat*np.array([[0.0,0.0,0.25]])
 #Depending on orientation of the unit cell we rotate the lattice
 #so that the addition of a vector from tetra_lattice is in the new x,y,z coordinate system.
 #i.e. we move from ([0,0,1], [0,1,0] ,[0,0,1]) for 001 oriented grain boundaries this is just a rotation
@@ -165,7 +167,6 @@ class Hydrify(object):
       rot_quat = quat.quaternion_about_axis(-theta, np.array([1,0,0]))
       for t in tetra_lattice:
         tetra.append(rotate_vec(rot_quat,t))
-        #tetra.append(t)
 #loop over octahedral sites decorating cluster
       print tetra
       h_list = []
@@ -173,13 +174,14 @@ class Hydrify(object):
         for lat in tetra:
           h_pos = h + lat
           h_list.append(h_pos)
-      h_list = self.append_if_thresh(h_list, rcut = 2.54)
+      h_list = self.append_if_thresh(h_list, rcut = d_H)
       for h_pos in h_list:
         cl.add_atoms(h_pos,1)
     else:
+      h_list = []
       for h in oct_sites:
-        cl.add_atoms(h,1)
-    cl.write('hydrogenated_tetrahedral.xyz')
+        h_list.append(h)
+      h_list = self.append_if_thresh(h_list, rcut = d_H)
     return h_list
 
 if __name__=='__main__':
