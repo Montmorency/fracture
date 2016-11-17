@@ -26,67 +26,9 @@ class Hydrify(object):
     tetravol=abs(np.dot((a-d),np.cross((b-d),(c-d))))/6
     return tetravol
 
-  def hydrify_multi_dirs(self, jobs, crack_pos):
-    """
-    Create new directories which mimic the original
-    pristine crack cell but then add hydrogen at the
-    crack tip. 
-    """
-    for job in jobs:
-      os.mkdir(job+'H1')
-      input  = os.path.join(job, 'crack.xyz')
-      pickle = os.path.join(job, 'crack_info.pckl')
-      shutil.copy(input, job+'H1')
-      shutil.copy(pickle, job+'H1')
-    for job in jobs:
-      os.chdir(job)
-      print job
-      cr = Atoms('crack.xyz')
-      self.hydrify_single_job(cr)
-      cr.add_atoms([109.17,-1.11,4.275],1)
-      cr.set_atoms(cr.numbers)
-      cr.write('crack.xyz')
-      os.chdir('../')
-
-  def hydrify_single_job(self, ats, positions=[]):
-    """
-    Add hydrogens at positions in list.
-    """
-    for h_pos in positions:
-      ats.add_atoms([109.17,-1.11,4.275],1)
-      ats.set_atoms(cr.numbers)
-
   def write_cluster(self, cl,name='cluster.xyz'):
     cl.center(vacuum=2.0)
     cl.write(name)
-
-  def add_h_smart(self, ats, position=np.array([0.0,0.0,0.0]),rr=10.0,n_h=1):
-    """
-    Given a position try to add the hydrogen in a "nice"
-    place. rr is radius of clust
-    """
-# First take a small selection of atoms around the crack tip
-    ats.calc_connect(2.5)
-    h_pos = np.array([118.032, 2.55, 2.78])
-    fixed_mask = (np.sqrt(map(sum, map(np.square, ats.positions[:,0:3]-h_pos[0:3]))) <= rr)
-    cl         = ats.select(fixed_mask, orig_index=True)
-#   self.write_cluster(cl.copy(), name = 'cluster.xyz')
-#  Then compute voronoi diagram and add hydrogens around there:
-    vor        = spatial.Voronoi(cl.positions, furthest_site=False)
-    delaunay   = spatial.Delaunay(cl.positions, furthest_site=False)
-#    f = open('furthest_site.dat', 'w')
-#    g = open('fe_sites.dat', 'w')
-    #for i in range(n_h):
-    for vert in vor.vertices:
-      ats.add_atoms(vert, 1)
-
-    fixed_mask = (np.sqrt(map(sum, map(np.square, ats.positions[:,0:3]-ats.params['CrackPos'][0:3]))) <= rr)
-    cl         = ats.select(fixed_mask)
-    self.write_cluster(cl.copy(), name = 'clusterH.xyz')
-    for pos in cl.positions:
-      print >> g, pos
-    f.close()
-    g.close()
 
   def append_if_thresh(self, h_pos, rcut = 1.6):
     """
@@ -99,22 +41,30 @@ class Hydrify(object):
         pared_h =  np.vstack((pared_h, h))
     return pared_h
 
-  def hydrogenate_gb(self, gb, z_plane=None, bp=np.array([1.,9.,0.]), d_plane=2.83, d_H=1.0, tetrahedral=True, alat=2.83):
+  def hydrogenate_gb(self, gb, mode='GB', z_plane=None, rr=15.0, bp=np.array([1.,9.,0.]), d_plane=2.83, d_H=1.6, tetrahedral=True, alat=2.83):
     """
-    Given a grain boundary, find a bulk plane to dump hydrogen in,
+    If mode is GB Given a grain boundary, find a bulk plane to dump hydrogen in,
     and a platelet of hydrogen parallel to the grain boundary. Routine
     returns positions of a suitable "plane" +/- 2A.
+    Else if mode is CrackTip we populate a spherical cluster with H.
     attributes:
+      mode    := 'GB' or 'CrackTip' either decorate a planar cluser of material with hydrogen appropriate for a grainboundary, 
+                  or a spherical cluster appropriate for a crack tip.
       d_H     := Nearest neighbour threshold for hydrogen atoms. Effectively determines the platelet concentration, 
       d_plane := width of planar slice of bulk to cut out for Delaunay Triangulation
       bp      := boundary plane
     """
-    if z_plane == None:
-      z_plane     = gb.lattice[2,2]/2.0
+    if mode=='GB':
+      if z_plane == None:
+        z_plane     = gb.lattice[2,2]/2.0
+      fixed_mask = (np.sqrt(np.square(gb.positions[:,2]-z_plane)) <= d_plane)
+      cl         = gb.select(fixed_mask, orig_index=True)
+      cl.write('plane.xyz')
+    elif mode=='CrackTip':
+      fixed_mask = (np.sqrt(map(sum, map(np.square, gb.positions[:,0:3]-gb.params['CrackPos'][0:3]))) <= rr)
+      cl         = gb.select(fixed_mask, orig_index=True)
+      cl.write('cluster.xyz')
 # Select the bulk plane:
-    fixed_mask = (np.sqrt(np.square(gb.positions[:,2]-z_plane)) <= d_plane)
-    cl         = gb.select(fixed_mask, orig_index=True)
-    cl.write('plane.xyz')
     tri   = spatial.Delaunay(cl.positions, furthest_site=False)
 #http://stackoverflow.com/questions/10650645/python-calculate-voronoi-tesselation-from-scipys-delaunay-triangulation-in-3d?rq=1
     p = tri.points[tri.vertices] 
@@ -143,12 +93,17 @@ class Hydrify(object):
 #so we removed them
     cc = cross2(sq2(a) * b - sq2(b) * a, a, b) / (2*ncross2(a, b)) + C
     plane_cc = cc.T
-    oct_sites=filter(lambda x: np.sqrt(np.square(x[2]-z_plane)) <= 1.0, plane_cc)
-    oct_sites = self.append_if_thresh(oct_sites)
+
+    if mode=='GB':
+      oct_sites=filter(lambda x: np.sqrt(np.square(x[2]-z_plane)) <= 1.0, plane_cc)
+      oct_sites = self.append_if_thresh(oct_sites)
+    elif mode=='CrackTip':
+      oct_sites=filter(lambda x: np.sqrt(sum(map(np.square, x[:]-gb.params['CrackPos'][:]))) <= rr, plane_cc)
+      oct_sites = self.append_if_thresh(oct_sites)
+    else:
+      sys.exit('No valid mode chosen.')
 
     if tetrahedral:
-      #tetra_lattice = alat*np.array([[0.0,-0.25,0],[0,0,-0.25],[0.0, 0.25,0.0], [0.0,0.0,0.25]])
-      #tetra_lattice = alat*np.array([[0,0,-0.25], [0.0,0.0,0.25]])
       tetra_lattice = alat*np.array([[0.0,0.0,0.25]])
 #Depending on orientation of the unit cell we rotate the lattice
 #so that the addition of a vector from tetra_lattice is in the new x,y,z coordinate system.
@@ -157,27 +112,51 @@ class Hydrify(object):
 #to the new orientation axis (1,1,0) or (1,1,1) and then rotate y,z to the bpxv, and z =bp (i.e.
 #boundary plane and  boundary plane crossed witht the orientation axis.
       tetra = []
-      #the orientation axis is actually or = [0,0,1] so the z coordinate wrt to the boundary plane
-      #is actually the "x coordinate". Hence we dot the boundary plane with x. however the angle is same and when 
-      #in the gb cell the orientation is along x,y,z as expected. So we take the angle from dotting [1,0,0]
-      #and then rotate lattice vectors in to x,y',z'.
-      z = np.array([0.,1., 0.])
-      theta = np.arccos(bp.dot(z)/(np.linalg.norm(bp)*(np.linalg.norm(z))))
-      print 'Rotating z by: ', (180/np.pi)*theta
-      rot_quat = quat.quaternion_about_axis(-theta, np.array([1,0,0]))
-      for t in tetra_lattice:
-        tetra.append(rotate_vec(rot_quat,t))
+#the orientation axis is actually or = [0,0,1] so the z coordinate wrt to the boundary plane
+#is actually the "x coordinate". Hence we dot the boundary plane with x. however the angle is same and when 
+#in the gb cell the orientation is along x,y,z as expected. So we take the angle from dotting [1,0,0]
+#and then rotate lattice vectors in to x, y',z'.
+      if mode =='GB':
+        z = np.array([0.,1., 0.])
+        theta = np.arccos(bp.dot(z)/(np.linalg.norm(bp)*(np.linalg.norm(z))))
+        print 'Rotating z by: ', (180/np.pi)*theta
+        rot_quat = quat.quaternion_about_axis(-theta, np.array([1,0,0]))
+        for t in tetra_lattice:
+          tetra.append(rotate_vec(rot_quat,t))
 #loop over octahedral sites decorating cluster
-      print tetra
-      h_list = []
-      for h in oct_sites:
-        for lat in tetra:
-          h_pos = h + lat
-          h_list.append(h_pos)
-      h_list = self.append_if_thresh(h_list, rcut = d_H)
-      for h_pos in h_list:
-        cl.add_atoms(h_pos,1)
+        h_list = []
+        for h in oct_sites:
+          for lat in tetra:
+            h_pos = h + lat
+            h_list.append(h_pos)
+        h_list = self.append_if_thresh(h_list, rcut = d_H)
+        #for h_pos in h_list:
+        #  cl.add_atoms(h_pos,1)
+      elif mode =='CrackTip':
+      #we just need to align our ref cell with ([-1 -1 2], [111], [-110])
+      #so require the rotation that takes [0 1 0] -> [111] (plus scaling new latt vecs).
+        theta = np.arccos(1.0/np.sqrt(3))
+        print 'Rotating y by: ', (180/np.pi)*theta
+        rot_quat = quat.quaternion_about_axis(-theta, np.array([1,0,-1]))
+        for t in tetra_lattice:
+          tetra.append(rotate_vec(rot_quat,t))
+      #now scale components of the vector:
+        for t in tetra_lattice:
+          a = 2.449 
+          b = 1.732
+          c = 1.4142
+          t = np.array([t[0]/a, t[1]/b, t[2]/c])
+        h_list = []
+        for h in oct_sites:
+          for lat in tetra:
+            h_pos = h + lat
+            h_list.append(h_pos)
+        h_list = self.append_if_thresh(h_list, rcut = d_H)
+        #for h_pos in h_list:
+        #  cl.add_atoms(h_pos,1)
     else:
+#In this case we just add to the octahedral or in a non-bulk
+#environment largest volume sites.
       h_list = []
       for h in oct_sites:
         h_list.append(h)
@@ -193,12 +172,10 @@ if __name__=='__main__':
   jobs = glob.glob(pattern)
   print jobs
   hydrify =  Hydrify()
+  scratch = os.getcwd()
   for job in jobs:
-    ats = Atoms(job)
-    print job
-    print len(ats)
-    print ats.params['CrackPos']
-    hydrify.add_h_smart(ats, position=[ats.params['CrackPos']])
-    #hydrify.add_h_smart(ats, position=[h_pos])
-    ats.write('thermalizedHtest.xyz')
+    os.chdir(job)
+    ats = Atoms('crack.xyz')
+    hydrify.hydrogenate_gb(mode='CrackTip')
+
 
