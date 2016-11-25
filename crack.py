@@ -259,6 +259,9 @@ class CrackCell(object):
     pot_file = os.path.join(pot_dir, self.param_file)
     pot      = Potential(self.mm_init_args, param_filename=pot_file)
     crack_slab.set_calculator(pot)
+#Initial crack pos
+    print 'crack_pos before relaxations'
+    print  find_crack_tip_stress_field(crack_slab, calc=mm_pot)
     print('Relaxing slab...')
     slab_opt = PreconFIRE(crack_slab) 
    # slab_opt = PreconLBFGS(crack_slab) 
@@ -297,7 +300,7 @@ class CrackCell(object):
     crack_slab.info['CrackFront']      = self.crack_front
     crack_slab.info['strain']          = self.strain
     #Initial guess for crack_pos
-    crack_slab.info['CrackPos']        = np.array([110., 1.5, 1.5])
+    crack_slab.info['CrackPos']        = np.array([1.5, 1.5, 1.5])
     crack_pos = find_crack_tip_stress_field(crack_slab, calc=mm_pot)
     print 'Found crack tip at position %s' % crack_pos
     crack_slab.info['CrackPos']        = crack_pos
