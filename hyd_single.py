@@ -7,7 +7,7 @@ import numpy as np
 from   ase import units
 from   quippy import Atoms, set_fortran_indexing
 from   quippy import set_fortran_indexing
-from   fracture.hydrify_cracktips import Hydrify
+from   hydrify_cracktips import Hydrify
 
 set_fortran_indexing(False)
 scratch = os.getcwd()

@@ -1,5 +1,6 @@
 import os
 import glob 
+import pickle
 import shutil
 import argparse 
 import numpy as np
@@ -41,7 +42,8 @@ class Hydrify(object):
         pared_h =  np.vstack((pared_h, h))
     return pared_h
 
-  def hydrogenate_gb(self, gb, mode='GB', z_plane=None, rr=15.0, bp=np.array([1.,9.,0.]), d_plane=2.83, d_H=1.6, tetrahedral=True, alat=2.83):
+  def hydrogenate_gb(self, gb, mode='GB', z_plane=None, rr=10.0, bp=np.array([1.,9.,0.]), d_plane=2.83, d_H=1.6, tetrahedral=True,
+  alat=2.83, crackpos_fix=None):
     """
     If mode is GB Given a grain boundary, find a bulk plane to dump hydrogen in,
     and a platelet of hydrogen parallel to the grain boundary. Routine
@@ -54,6 +56,9 @@ class Hydrify(object):
       d_plane := width of planar slice of bulk to cut out for Delaunay Triangulation
       bp      := boundary plane
     """
+    if not (d_H>0):
+      return
+
     if mode=='GB':
       if z_plane == None:
         z_plane     = gb.lattice[2,2]/2.0
@@ -61,9 +66,14 @@ class Hydrify(object):
       cl         = gb.select(fixed_mask, orig_index=True)
       cl.write('plane.xyz')
     elif mode=='CrackTip':
-      fixed_mask = (np.sqrt(map(sum, map(np.square, gb.positions[:,0:3]-gb.params['CrackPos'][0:3]))) <= rr)
+      if crackpos_fix == None: 
+        fixed_mask = (np.sqrt(map(sum, map(np.square, gb.positions[:,0:3]-gb.params['CrackPos'][0:3]))) <= rr)
+      else:
+        fixed_mask = (np.sqrt(map(sum, map(np.square, gb.positions[:,0:3]-crackpos_fix[:]))) <= rr)
       cl         = gb.select(fixed_mask, orig_index=True)
       cl.write('cluster.xyz')
+    else:
+      sys.exit('No Mode chosen.')
 # Select the bulk plane:
     tri   = spatial.Delaunay(cl.positions, furthest_site=False)
 #http://stackoverflow.com/questions/10650645/python-calculate-voronoi-tesselation-from-scipys-delaunay-triangulation-in-3d?rq=1
@@ -104,7 +114,8 @@ class Hydrify(object):
       sys.exit('No valid mode chosen.')
 
     if tetrahedral:
-      tetra_lattice = alat*np.array([[0.0,0.0,0.25]])
+      #tetra_lattice = alat*np.array([[0.25,0.0,0.5]])
+      tetra_lattice = alat*np.array([[0.0, -0.5, -0.75]])
 #Depending on orientation of the unit cell we rotate the lattice
 #so that the addition of a vector from tetra_lattice is in the new x,y,z coordinate system.
 #i.e. we move from ([0,0,1], [0,1,0] ,[0,0,1]) for 001 oriented grain boundaries this is just a rotation
@@ -133,24 +144,21 @@ class Hydrify(object):
         #for h_pos in h_list:
         #  cl.add_atoms(h_pos,1)
       elif mode =='CrackTip':
-      #we just need to align our ref cell with ([-1 -1 2], [111], [-110])
-      #so require the rotation that takes [0 1 0] -> [111] (plus scaling new latt vecs).
-        theta = np.arccos(1.0/np.sqrt(3))
-        print 'Rotating y by: ', (180/np.pi)*theta
-        rot_quat = quat.quaternion_about_axis(-theta, np.array([1,0,-1]))
+        with open('crack_info.pckl','r') as f:
+          crack_dict = pickle.load(f)
+        mat = np.array([crack_dict['crack_direction'], crack_dict['cleavage_plane'], crack_dict['crack_front']]).T
+        mat = np.matrix(mat)
+        mat = mat.I
+      #rotate lattice vector to new coordinate system
+        print tetra_lattice[0]
+        print mat.dot(tetra_lattice[0])
         for t in tetra_lattice:
-          tetra.append(rotate_vec(rot_quat,t))
-      #now scale components of the vector:
-        for t in tetra_lattice:
-          a = 2.449 
-          b = 1.732
-          c = 1.4142
-          t = np.array([t[0]/a, t[1]/b, t[2]/c])
+          tetra.append((mat).dot(t))
         h_list = []
         for h in oct_sites:
           for lat in tetra:
             h_pos = h + lat
-            h_list.append(h_pos)
+            h_list.append(np.array(h_pos))
         h_list = self.append_if_thresh(h_list, rcut = d_H)
         #for h_pos in h_list:
         #  cl.add_atoms(h_pos,1)
