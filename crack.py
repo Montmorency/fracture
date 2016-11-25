@@ -13,7 +13,7 @@ from   ase.optimize      import FIRE
 #from   ase.optimize      import LBFGS
 #preconditioned LBFGS is !much! faster for the crack slab
 #relaxations tested so far.
-from   ase.optimize.precon  import LBFGS
+from   ase.optimize.precon import PreconFIRE, PreconLBFGS
 
 from   quippy            import set_fortran_indexing
 from   quippy.potential  import Potential, Minim
@@ -179,7 +179,7 @@ class CrackCell(object):
     print 'Number atoms in unit slab', len(unit_slab)
     unit_slab.positions[:, 1] += (unit_slab.positions[1, 1]-unit_slab.positions[0, 1])/2.0
     unit_slab.set_scaled_positions(unit_slab.get_scaled_positions())
-    pot_dir  = '/Users/lambert/pymodules/imeall/imeall/potentials/'
+    pot_dir  = os.environ['POTDIR']
     pot_file = os.path.join(pot_dir, self.param_file)
     pot     = Potential(self.mm_init_args, param_filename = pot_file)
     unit_slab.set_calculator(pot)
@@ -201,7 +201,7 @@ class CrackCell(object):
     unit_slab.set_scaled_positions(unit_slab.get_scaled_positions())
     surface = unit_slab.copy()
     surface.center(vacuum=self.vacuum, axis=1)
-    pot_dir  = '/Users/lambert/pymodules/imeall/imeall/potentials/'
+    pot_dir  = os.environ['POTDIR']
     pot_file = os.path.join(pot_dir, self.param_file)
     pot     = Potential(self.mm_init_args, param_filename=pot_file)
     surface.set_calculator(pot)
@@ -255,12 +255,13 @@ class CrackCell(object):
     print('Applied initial load: strain=%.4f, G=%.2f J/m^2' %
          (self.strain, self.initial_G / (units.J / units.m**2)))
 
-    pot_dir  = '/Users/lambert/pymodules/imeall/imeall/potentials/'
+    pot_dir  = os.environ['POTDIR']
     pot_file = os.path.join(pot_dir, self.param_file)
     pot      = Potential(self.mm_init_args, param_filename=pot_file)
     crack_slab.set_calculator(pot)
     print('Relaxing slab...')
-    slab_opt = FIRE(crack_slab) 
+    slab_opt = PreconFIRE(crack_slab) 
+   # slab_opt = PreconLBFGS(crack_slab) 
    # slab_opt = LBFGS(crack_slab)
     slab_opt.run(fmax=self.relax_fmax)
     return crack_slab
@@ -320,7 +321,7 @@ if __name__ == '__main__':
   if not Grain_Boundary:
     unit_slab  = crack.build_unit_slab()
 
-  pot_dir  = '/Users/lambert/pymodules/imeall/imeall/potentials/'
+  pot_dir  = os.environ['POTDIR']
   pot_file = os.path.join(pot_dir, crack_info['param_file'])
   mm_pot   = Potential('IP EAM_ErcolAd', param_filename=pot_file, cutoff_skin=2.0)
 

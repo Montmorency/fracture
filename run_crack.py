@@ -15,30 +15,33 @@ from quippy.lotf      import LOTFDynamics, update_hysteretic_qm_region
 from simulate_crack   import update_qm_region_context, fix_edges, set_qmmm_pot, pass_print_context,\
                              check_if_cracked_context, pass_trajectory_context
 import argparse
+import pickle
 #simulation parameters
 extrapolate_steps = 10         # Number of steps for predictor-corrector
                                # interpolation and extrapolation
-sim_T       = 300.0*units.kB   # Simulation temperature
+with open('crack_info.pckl','r') as f:
+  cd = pickle.load(f)
+sim_T       = cd['sim_T']   # Simulation temperature
 nsteps      = 5000             # Total number of timesteps to run for
-timestep    = 2.0*units.fs     # Timestep (NB: time base units are not fs!)
+timestep    = 0.5*units.fs     # Timestep (NB: time base units are not fs!)
 cutoff_skin = 2.0*units.Ang    # Amount by which potential cutoff is increased
                                # for neighbour calculations
 tip_move_tol = 12.0            # Distance tip has to move before crack
                                # is taken to be running
 #strain_rate    = 0.0*(1.0/units.fs)
 strain_rate    = 0.0
-traj_interval  = 5             # Number of time steps between interpolations
+traj_interval  = 3             # Number of time steps between interpolations
 print_interval = 10             # time steps between trajectory prints 10 fs
 param_file     = 'params.xml'   # Filename of XML file containing
                                 # potential parameters
-mm_init_args = 'IP EAM_ErcolAd' # Classical potential
+mm_init_args = 'IP EAM_ErcolAd do_rescale_r=T r_scale=1.008948312' # Classical potential
 qm_init_args = 'TB DFTB'        # Initialisation arguments for QM potential
 input_file   = 'crack.xyz'      # crack_slab
 traj_file    = 'crack_traj.xyz' # Trajectory output file in (NetCDF format)
 try:
   pot_dir      = os.environ['POTDIR']
 except:
-  sys.exit("PLEASE SET export POTDIR='path/to/potfiles/'"
+  sys.exit("PLEASE SET export POTDIR='path/to/potfiles/')")
 
 pot_file     = os.path.join(pot_dir, 'PotBH.xml')
 
