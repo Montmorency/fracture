@@ -52,7 +52,7 @@ else:
 #Delaunay can go a little haywire. We remove any H that is far too close to an Fe atom
 # |h-fe| < 1.1. and we remove the vacuum Hs
 ats.write('crackH.xyz')
-h_atoms = len((ats.get_atomic_numbers() ==1))
+h_atoms = sum((ats.get_atomic_numbers() ==1))
 zlen    = ats.get_cell()[2,2]
 with open('h.txt','w') as f:
   print >>f,  'There are {} H atoms per {} A'.format(h_atoms, zlen)
