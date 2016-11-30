@@ -10,11 +10,10 @@ from   ase.lattice       import bulk
 from   ase.constraints   import FixAtoms
 from   ase.lattice.cubic import Diamond, BodyCenteredCubic
 from   ase.optimize      import FIRE
-#from   ase.optimize      import LBFGS
+#from  ase.optimize      import LBFGS
 #preconditioned LBFGS is !much! faster for the crack slab
 #relaxations tested so far.
-from   ase.optimize.precon import PreconFIRE, PreconLBFGS
-
+from   ase.optimize.precon  import PreconLBFGS, PreconFIRE
 from   quippy            import set_fortran_indexing
 from   quippy.potential  import Potential, Minim
 from   quippy.elasticity import youngs_modulus, poisson_ratio, rayleigh_wave_speed, AtomResolvedStressField
