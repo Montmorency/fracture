@@ -13,7 +13,7 @@ from   ase.optimize      import FIRE
 #from   ase.optimize      import LBFGS
 #preconditioned LBFGS is !much! faster for the crack slab
 #relaxations tested so far.
-from   ase.optimize.precon  import LBFGS
+#from   ase.optimize.precon  import LBFGS
 
 from   quippy            import set_fortran_indexing
 from   quippy.potential  import Potential, Minim
