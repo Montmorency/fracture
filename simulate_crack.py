@@ -9,16 +9,17 @@ from quippy.potential import Potential
 from quippy.io import AtomsWriter, AtomsReader
 from quippy.crack import(get_strain, get_energy_release_rate,
                          ConstantStrainRate, find_crack_tip_stress_field)
-from quippy import set_fortran_indexing
-from quippy.lotf import LOTFDynamics, update_hysteretic_qm_region
+from quippy           import set_fortran_indexing
+from quippy.lotf      import LOTFDynamics, update_hysteretic_qm_region
 from quippy.potential import ForceMixingPotential
-from quippy.clusters import HYBRID_NO_MARK, HYBRID_ACTIVE_MARK
+from quippy.clusters  import HYBRID_NO_MARK, HYBRID_ACTIVE_MARK
+from quippy.util      import args_str
 
 #simulation parameters
 qm_init_args      = 'TB DFTB'       # Initialisation arguments for QM potential
-qm_inner_radius   = 18.0*units.Ang  # Inner hysteretic radius for QM region
-qm_outer_radius   = 21.0*units.Ang  # Inner hysteretic radius for QM region
-extrapolate_steps = 10         # Number of steps for predictor-corrector
+qm_inner_radius   = 3.0*units.Ang  # Inner hysteretic radius for QM region
+qm_outer_radius   = 5.0*units.Ang  # Inner hysteretic radius for QM region
+extrapolate_steps = 5         # Number of steps for predictor-corrector
                                # interpolation and extrapolation
 input_file  = 'crack.xyz'      # crack_slab
 sim_T       = 300.0*units.kB   # Simulation temperature
@@ -37,7 +38,6 @@ restart_traj_file  = 'traj_lotf_2b.xyz'    # Trajectory output file in (NetCDF f
 print_interval = 10            # time steps between trajectory prints 10 fs
 param_file = 'params.xml'      # Filename of XML file containing
                                # potential parameters
-mm_init_args = 'IP SW'         # Classical potential
 set_fortran_indexing(False)
 
 #sw_pot = Potential('IP SW', param_filename='params.xml', cutoff_skin=cutoff_skin)
@@ -96,21 +96,33 @@ State      Time/fs    Temp/K     Strain      G/(J/m^2)  CrackPos/A D(CrackPos)/A
 
 #pot1 is the low precision
 #pot2 is the high precision, i.e. QM potential
-def set_qmmm_pot(atoms, crack_pos):
-  qmmm_pot = ForceMixingPotential(pot1=sw_pot, pot2=qm_pot, atoms=atoms,
-                               qm_args_str='single_cluster cluster_periodic_z carve_cluster '+
-                              'terminate cluster_hopping=F randomise_buffer=F',
-                               fit_hops=4,
-                               lotf_spring_hops=3,
-                               hysteretic_buffer=True,
-                               hysteretic_buffer_inner_radius=qm_inner_radius,
-                               hysteretic_buffer_outer_radius=qm_outer_radius,
-                               cluster_hopping_nneighb_only=False,
-                               min_images_only=True)
+def set_qmmm_pot(atoms, crack_pos, mm_pot, qm_pot):
+  cluster_args = dict(single_cluster=True,
+                      cluster_calc_connect=True,
+                      cluster_hopping=False,
+                      cluster_hopping_nneighb_only=True,
+                      cluster_periodic_z = True, # match Gamma vs. kpts
+                      cluster_vacuum     = 5.0,
+                      hysteretic_buffer=True,
+                      hysteretic_buffer_inner_radius=qm_inner_radius,
+                      hysteretic_buffer_outer_radius=qm_outer_radius,
+                      min_images_only=True,
+                      terminate=False,
+                      force_no_fix_termination_clash=True,
+                      randomise_buffer=False)
+
+
+  qmmm_pot = ForceMixingPotential(pot1=mm_pot, pot2=qm_pot, atoms=atoms,
+                                  qm_args_str = args_str(cluster_args),
+                                  fit_hops=2,
+                                  lotf_spring_hops=2,
+                                  **cluster_args)
   qmmm_pot.atoms = atoms
   atoms.set_calculator(qmmm_pot)
-  qm_list = update_hysteretic_qm_region(atoms, [], crack_pos, qm_inner_radius,
-                                        qm_outer_radius, update_marks=True)
+ # qm_list = update_hysteretic_qm_region(atoms, [], crack_pos, qm_inner_radius,
+ #                                       qm_outer_radius, update_marks=True)
+  fixed_mask = (np.sqrt(map(sum, map(np.square, atoms.positions[:,0:2]-crack_pos[0:2]))) <= 3)
+  qm_list  = fixed_mask.nonzero()[0]
   qmmm_pot.set_qm_atoms(qm_list)
   return qmmm_pot
 
