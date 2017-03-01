@@ -262,7 +262,7 @@ class CrackCell(object):
     print 'crack_pos before relaxations'
     print  find_crack_tip_stress_field(crack_slab, calc=mm_pot)
     print('Relaxing slab...')
-    slab_opt = FIRE(crack_slab) 
+    slab_opt = PreconFIRE(crack_slab) 
    # slab_opt = LBFGS(crack_slab)
     slab_opt.run(fmax=self.relax_fmax)
     return crack_slab
