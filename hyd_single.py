@@ -2,6 +2,7 @@ import os
 import sys
 import glob 
 import pickle
+import argparse
 import subprocess
 import numpy as np
 from   ase import units
@@ -13,8 +14,17 @@ set_fortran_indexing(False)
 scratch = os.getcwd()
 hydrify = Hydrify()
 
+parser = argparse.ArgumentParser()
+parser.add_argument("-dc", "--double_cell", help="Double Cell along z direction", action="store_true")
+args   = parser.parse_args()
+DOUBLE_CELL = args.double_cell
+
 ats = Atoms('crack.xyz')
-#ats.params['CrackPos'] = np.array([330, 0.0, 0.0])
+if DOUBLE_CELL:
+  ats = ats*(1,1,2)
+
+ats.info['adsorbate_info']=None
+
 with open('crack_info.pckl','r') as f:
   crack_dict= pickle.load(f)
 print 'G: {}, H_d: {}, sim_T {}'.format(crack_dict['initial_G']*(units.m**2/units.J),

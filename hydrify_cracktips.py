@@ -33,8 +33,8 @@ class Hydrify(object):
 
   def append_if_thresh(self, h_pos, rcut = 1.6):
     """
-    add position vector to list if it is greater than a specified distance from existing
-    vectoras
+    :method: append_if_thresh add position vector to list if it is greater than a 
+    specified distance from existing vectors.
     """
     pared_h = h_pos[0]
     for h in h_pos[1:]:
@@ -56,8 +56,9 @@ class Hydrify(object):
       d_plane := width of planar slice of bulk to cut out for Delaunay Triangulation
       bp      := boundary plane
     """
-    if not (d_H>0):
-      return
+    #return empty list if H spacing is not greater than 0
+    if not (d_H > 0.0):
+      return []
 
     if mode=='GB':
       if z_plane == None:

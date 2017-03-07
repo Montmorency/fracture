@@ -117,7 +117,7 @@ class CrackCell(object):
     self.cleavage_plane  = (-2, 1, 1)
     self.crack_direction = (0, 1, -1)
     self.crack_front     = (1,1,1)
-    self.a0              = 2.85
+    self.a0              = 2.83
     self.nx              = 1
     self.ny              = 1
 #These are derived properties cell must be initialized before
@@ -158,6 +158,7 @@ class CrackCell(object):
       raise
     pot_file = os.path.join(pot_dir, self.param_file)
     pot     = Potential(self.mm_init_args, param_filename=pot_file)
+    at_bulk.info['adsorbate_info'] = None
     at_bulk.set_calculator(pot)
     self.cij  = pot.get_elastic_constants(at_bulk)
     print((self.cij / units.GPa).round(2))
@@ -176,6 +177,7 @@ class CrackCell(object):
                                size=size, symbol='Fe', pbc=(1,1,1),
                                latticeconstant=self.a0)
     print 'Number atoms in unit slab', len(unit_slab)
+    unit_slab.info['adsorbate_info'] = None
     unit_slab.positions[:, 1] += (unit_slab.positions[1, 1]-unit_slab.positions[0, 1])/2.0
     unit_slab.set_scaled_positions(unit_slab.get_scaled_positions())
     pot_dir  = os.environ['POTDIR']
@@ -196,6 +198,7 @@ class CrackCell(object):
                                size=size, symbol='Fe', pbc=(1,1,1),
                                latticeconstant=self.a0)
 # Does this work for more than 2 atoms?
+    unit_slab.info['adsorbate_info'] = None
     unit_slab.positions[:, 1] += (unit_slab.positions[1, 1]-unit_slab.positions[0, 1])/2.0
     unit_slab.set_scaled_positions(unit_slab.get_scaled_positions())
     surface = unit_slab.copy()
@@ -263,8 +266,6 @@ class CrackCell(object):
     print  find_crack_tip_stress_field(crack_slab, calc=mm_pot)
     print('Relaxing slab...')
     slab_opt = PreconFIRE(crack_slab) 
-   # slab_opt = PreconLBFGS(crack_slab) 
-   # slab_opt = LBFGS(crack_slab)
     slab_opt.run(fmax=self.relax_fmax)
     return crack_slab
 
@@ -337,8 +338,9 @@ if __name__ == '__main__':
   crack.calculate_c()
   surface    = crack.build_surface()
   E_surf = surface.get_potential_energy()
-  bulk = bcc(2.85)
+  bulk = bcc(2.83)
   bulk.set_atoms(26)
+  bulk.info['adsorbate_info']=None
   bulk.set_calculator(mm_pot)
   E_bulk = bulk.get_potential_energy()/len(bulk)
   area = (surface.get_cell()[0,0]*surface.get_cell()[2,2])
