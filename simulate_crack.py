@@ -58,7 +58,9 @@ def fix_edges(atoms):
   fix_atoms  = FixAtoms(mask=fixed_mask)
   print('Fixed %d atoms\n' % fixed_mask.sum()) # Print the number of fixed atoms
   strain_atoms = ConstantStrainRate(orig_height, strain_rate*timestep)
-  atoms.set_constraint([fix_atoms, strain_atoms])
+#HL NO STRAIN RATE
+  #atoms.set_constraint([fix_atoms, strain_atoms])
+  atoms.set_constraint([fix_atoms])
   return strain_atoms
 
 def pass_print_context(atoms, dynamics, mm_pot):
@@ -110,8 +112,6 @@ def set_qmmm_pot(atoms, crack_pos, mm_pot, qm_pot):
                       terminate=False,
                       force_no_fix_termination_clash=True,
                       randomise_buffer=False)
-
-
   qmmm_pot = ForceMixingPotential(pot1=mm_pot, pot2=qm_pot, atoms=atoms,
                                   qm_args_str = args_str(cluster_args),
                                   fit_hops=2,
@@ -123,7 +123,7 @@ def set_qmmm_pot(atoms, crack_pos, mm_pot, qm_pot):
  #                                       qm_outer_radius, update_marks=True)
   fixed_mask = (np.sqrt(map(sum, map(np.square, atoms.positions[:,0:2]-crack_pos[0:2]))) <= 3)
   qm_list  = fixed_mask.nonzero()[0]
-  qmmm_pot.set_qm_atoms(qm_list)
+  qmmm_pot.set_qm_atoms(qm_list, atoms)
   return qmmm_pot
 
 def pass_trajectory_context(trajectory, dynamics):

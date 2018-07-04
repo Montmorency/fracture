@@ -1,9 +1,11 @@
 import os 
-import pickle
+import json
 import argparse
 import numpy as np
 import ase.units as units
 
+from ase.io import Trajectory
+from ase import Atoms as aseAtoms
 from ase.constraints             import FixAtoms
 from ase.md.verlet               import VelocityVerlet
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
@@ -20,8 +22,8 @@ from simulate_crack   import update_qm_region_context, fix_edges, set_qmmm_pot, 
 #simulation parameters
 extrapolate_steps = 10         # Number of steps for predictor-corrector
                                # interpolation and extrapolation
-with open('crack_info.pckl','r') as f:
-  crack_dict = pickle.load(f)
+with open('crack_info.json','r') as f:
+  crack_dict = json.load(f)
 
 sim_T       = crack_dict['sim_T'] # Simulation temperature
 nsteps      = 6000             # Total number of timesteps to run for
@@ -53,7 +55,7 @@ if __name__=='__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument("-i", "--input_file",  help="File containing initial configuration. \
                                                    Default is crack.xyz.", default='crack.xyz')
-  parser.add_argument("-o", "--output_file", help="File trajectory is written to.", default='./PotBH/Run01/crack_traj.xyz')
+  parser.add_argument("-o", "--output_file", help="File trajectory is written to.", default='./crack_traj.xyz')
   parser.add_argument("-p", "--pot_file",    help="Potential is set.", default=os.path.join(pot_dir,'PotBH.xml'))
   parser.add_argument("-r", "--restart",     help="If false thermalizes atoms and fixes boundary conditions,\
                                                    frame in trajectory.", action="store_true")
@@ -65,7 +67,6 @@ if __name__=='__main__':
   if restart:
     print 'Restarting job'
 
-  input_file = args.input_file
   pot_file   = args.pot_file
   if args.output_file:
     traj_file = args.output_file
@@ -74,11 +75,12 @@ if __name__=='__main__':
   if args.lotf:
     print 'Initialize Potentials'
     print 'Read last MD snapshot'
-    print 'Reading from ', input_file
+    print 'Reading from ', args.input_file
 
     mm_pot = Potential(mm_init_args, param_filename=pot_file, cutoff_skin=cutoff_skin)
     qm_pot = Potential(qm_init_args, param_filename='params.xml')
-    atoms = Atoms(input_file)
+
+    atoms = AtomsReader(input_file)[-1]
     strain_atoms = fix_edges(atoms)
     current_crack_pos = find_crack_tip_stress_field(atoms, calc=mm_pot)
     qmmm_pot = set_qmmm_pot(atoms, current_crack_pos)
@@ -106,10 +108,8 @@ if __name__=='__main__':
     print 'Crack Simulation Finished'
   else:
     mm_pot = Potential(mm_init_args, param_filename=pot_file, cutoff_skin=cutoff_skin)
-    atoms = AtomsReader(input_file)[-1]
-    atoms = Atoms(atoms)
+    atoms = AtomsReader(args.input_file)[-1]
     atoms.set_calculator(mm_pot)
-    atoms.info['adsorbate_info'] = None
     strain_atoms = fix_edges(atoms)
     current_crack_pos = find_crack_tip_stress_field(atoms, calc=mm_pot)
     print 'Current Crack Position: ', current_crack_pos
@@ -117,10 +117,15 @@ if __name__=='__main__':
       print 'Thermalizing Atoms'
       MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)
     dynamics = VelocityVerlet(atoms, timestep)
-    dynamics.attach(pass_print_context(atoms, dynamics, mm_pot))
-    dynamics.attach(check_if_cracked_context(strain_atoms, mm_pot), 1, atoms)
-    trajectory = AtomsWriter(traj_file)
-    dynamics.attach(pass_trajectory_context(trajectory, dynamics), print_interval, dynamics)
+
+    def print_context(ats=atoms, dyn=dynamics):
+        print 'steps, T', dyn.nsteps, ats.get_kinetic_energy()/(1.5*units.kB*len(ats))
+        print 'G', get_energy_release_rate(ats)/(units.J/units.m**2)
+        print 'strain', get_strain(ats)
+
+    dynamics.attach(print_context, interval=8)
     print 'Running Crack Simulation'
+    traj = Trajectory('run_crack_IV.traj', 'w', atoms)
+    dynamics.attach(traj.write, interval=32)
     dynamics.run(nsteps)
     print 'Crack Simulation Finished'
