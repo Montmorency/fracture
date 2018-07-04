@@ -58,7 +58,8 @@ def fix_edges(atoms):
   fix_atoms  = FixAtoms(mask=fixed_mask)
   print('Fixed %d atoms\n' % fixed_mask.sum()) # Print the number of fixed atoms
   strain_atoms = ConstantStrainRate(orig_height, strain_rate*timestep)
-  atoms.set_constraint([fix_atoms, strain_atoms])
+  #atoms.set_constraint([fix_atoms, strain_atoms])
+  atoms.set_constraint([fix_atoms])
   return strain_atoms
 
 def pass_print_context(atoms, dynamics, mm_pot):

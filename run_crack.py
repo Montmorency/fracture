@@ -18,7 +18,7 @@ from quippy.lotf      import LOTFDynamics, update_hysteretic_qm_region
 from simulate_crack   import update_qm_region_context, fix_edges, set_qmmm_pot, pass_print_context,\
                              check_if_cracked_context, pass_trajectory_context
 #simulation parameters
-extrapolate_steps = 10         # Number of steps for predictor-corrector
+extrapolate_steps = 20         # Number of steps for predictor-corrector
                                # interpolation and extrapolation
 with open('crack_info.pckl','r') as f:
   crack_dict = pickle.load(f)

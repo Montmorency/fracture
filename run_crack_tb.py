@@ -12,7 +12,8 @@ from  quippy           import Atoms, supercell
 from  quippy.potential import Potential
 from  quippy.io        import AtomsWriter, AtomsReader
 from  quippy.crack     import get_strain, get_energy_release_rate,\
-                             ConstantStrainRate, find_crack_tip_stress_field
+                              ConstantStrainRate, find_crack_tip_stress_field
+
 from quippy           import set_fortran_indexing
 from quippy.potential import ForceMixingPotential
 from quippy.lotf      import LOTFDynamics, update_hysteretic_qm_region
