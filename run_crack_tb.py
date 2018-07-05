@@ -2,25 +2,24 @@ import os
 import argparse
 import numpy as np
 import ase.units as units
-
-from  ase.constraints             import FixAtoms
-from  ase.md.verlet               import VelocityVerlet
-from  ase.md.velocitydistribution import MaxwellBoltzmannDistribution
-from  ase.optimize     import FIRE, LBFGS
-from  ase.lattice.cubic       import BodyCenteredCubic
-from  quippy           import Atoms, supercell
-from  quippy.potential import Potential
-from  quippy.io        import AtomsWriter, AtomsReader
-from  quippy.crack     import get_strain, get_energy_release_rate,\
-                              ConstantStrainRate, find_crack_tip_stress_field
-
+from ase.constraints             import FixAtoms
+from ase.md.verlet               import VelocityVerlet
+from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
+from ase.optimize     import FIRE, LBFGS
+from ase.lattice.cubic       import BodyCenteredCubic
+from quippy           import Atoms, supercell
+from quippy.potential import Potential
+from quippy.io        import AtomsWriter, AtomsReader
+from quippy.crack     import get_strain, get_energy_release_rate,\
+                             ConstantStrainRate, find_crack_tip_stress_field
 from quippy           import set_fortran_indexing
 from quippy.potential import ForceMixingPotential
 from quippy.lotf      import LOTFDynamics, update_hysteretic_qm_region
 from fracture.simulate_crack   import update_qm_region_context, fix_edges, set_qmmm_pot, pass_print_context,\
                                       check_if_cracked_context, pass_trajectory_context
-from   fracture      import tb_pot
-from   quippy.system import verbosity_push, PRINT_VERBOSE
+from fracture      import tb_pot
+from quippy.system import verbosity_push, PRINT_VERBOSE
+from quippy.potential import ForceMixingPotential
 
 
 #simulation parameters
@@ -44,11 +43,11 @@ mm_init_args = 'IP EAM_ErcolAd' # Classical potential
 qm_init_args = 'TB DFTB'        # Initialisation arguments for QM potential
 input_file   = 'crack.xyz'      # crack_slab
 traj_file    = 'crack_traj.xyz' # Trajectory output file in (NetCDF format)
+
 try:
   pot_dir      = os.environ['POTDIR']
 except:
   sys.exit("PLEASE SET export POTDIR='path/to/potfiles/'")
-
 pot_file     = os.path.join(pot_dir, 'PotBH.xml')
 
 # Restart from last point in trajectory file:
@@ -105,8 +104,8 @@ if __name__=='__main__':
     print 'Reading from ', input_file
     TB = False
     if TB:
-      qmmm_pot = set_qmmm_pot(atoms, atoms.params['CrackPos'], mm_pot, proto_qm_pot)
 # do a one-off calculationto set up the TB potential with correct cluster
+      qmmm_pot = set_qmmm_pot(atoms, atoms.params['CrackPos'], mm_pot, proto_qm_pot)
       qmmm_pot.get_forces()
     else:
       print 'Running WITH EAM as embedded cluster'

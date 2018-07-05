@@ -3,6 +3,8 @@ from   ase.constraints import FixAtoms
 from   ase.md.verlet import VelocityVerlet
 from   ase.md.velocitydistribution import MaxwellBoltzmannDistribution
 import ase.units as units
+ 
+from imeall import app
 
 from quippy import Atoms
 from quippy.potential import Potential
@@ -16,15 +18,15 @@ from quippy.clusters  import HYBRID_NO_MARK, HYBRID_ACTIVE_MARK
 from quippy.util      import args_str
 
 #simulation parameters
-qm_init_args      = 'TB DFTB'       # Initialisation arguments for QM potential
+qm_init_args      = 'TB DFTB'      # Initialisation arguments for QM potential
 qm_inner_radius   = 3.0*units.Ang  # Inner hysteretic radius for QM region
-qm_outer_radius   = 5.0*units.Ang  # Inner hysteretic radius for QM region
-extrapolate_steps = 5         # Number of steps for predictor-corrector
-                               # interpolation and extrapolation
-input_file  = 'crack.xyz'      # crack_slab
-sim_T       = 300.0*units.kB   # Simulation temperature
-nsteps      = 10000            # Total number of timesteps to run for
-timestep    = 1.0*units.fs     # Timestep (NB: time base units are not fs!)
+qm_outer_radius   = 8.0*units.Ang  # Inner hysteretic radius for QM region
+extrapolate_steps = 8              # Number of steps for predictor-corrector
+                                   # interpolation and extrapolation
+input_file  = 'crack.xyz'          # crack_slab
+sim_T       = 300.0*units.kB       # Simulation temperature
+nsteps      = 10000             # Total number of timesteps to run for
+timestep    = 0.25*units.fs     # Timestep (NB: time base units are not fs!)
 cutoff_skin = 2.0*units.Ang    # Amount by which potential cutoff is increased
                                # for neighbour calculations
 tip_move_tol = 10.0            # Distance tip has to move before crack
@@ -97,34 +99,37 @@ State      Time/fs    Temp/K     Strain      G/(J/m^2)  CrackPos/A D(CrackPos)/A
 
 #pot1 is the low precision
 #pot2 is the high precision, i.e. QM potential
-def set_qmmm_pot(atoms, crack_pos, mm_pot, qm_pot):
-  cluster_args = dict(single_cluster=True,
-                      cluster_calc_connect=True,
-                      cluster_hopping=False,
-                      cluster_hopping_nneighb_only=True,
-                      cluster_periodic_z = True, # match Gamma vs. kpts
-                      cluster_vacuum     = 5.0,
-                      hysteretic_buffer=True,
-                      hysteretic_buffer_inner_radius=qm_inner_radius,
-                      hysteretic_buffer_outer_radius=qm_outer_radius,
-                      min_images_only=True,
-                      terminate=False,
-                      force_no_fix_termination_clash=True,
-                      randomise_buffer=False)
-
+def set_qmmm_pot(atoms, crack_pos, mm_pot, qm_pot, atom_mask=None):
+#  cluster_args = dict(single_cluster=True,
+#                      cluster_calc_connect=True,
+#                      cluster_hopping=False,
+#                      cluster_hopping_nneighb_only=True,
+#                      cluster_periodic_z = True, # match Gamma vs. kpts
+#                      cluster_vacuum     = 5.0,
+#                      hysteretic_buffer=True,
+#                      hysteretic_buffer_inner_radius=qm_inner_radius,
+#                      hysteretic_buffer_outer_radius=qm_outer_radius,
+#                      min_images_only=True,
+#                      terminate=False,
+#                      force_no_fix_termination_clash=True,
+#                      randomise_buffer=False)
 
   qmmm_pot = ForceMixingPotential(pot1=mm_pot, pot2=qm_pot, atoms=atoms,
-                                  qm_args_str = args_str(cluster_args),
-                                  fit_hops=2,
-                                  lotf_spring_hops=2,
-                                  **cluster_args)
+                                  qm_args_str='single_cluster cluster_periodic_z carve_cluster ' +
+                                              'terminate cluster_hopping=F randomise_buffer=F',
+                                  fit_hops=4,
+                                  lotf_spring_hops=3,
+                                  hysteretic_buffer=True,
+                                  hysteretic_buffer_inner_radius=qm_inner_radius,
+                                  hysteretic_buffer_outer_radius=qm_outer_radius,
+                                  cluster_hopping_nneighb_only=False,
+                                  min_images_only=True)
+
   qmmm_pot.atoms = atoms
   atoms.set_calculator(qmmm_pot)
- # qm_list = update_hysteretic_qm_region(atoms, [], crack_pos, qm_inner_radius,
- #                                       qm_outer_radius, update_marks=True)
   fixed_mask = (np.sqrt(map(sum, map(np.square, atoms.positions[:,0:2]-crack_pos[0:2]))) <= 3)
   qm_list  = fixed_mask.nonzero()[0]
-  qmmm_pot.set_qm_atoms(qm_list)
+  qmmm_pot.set_qm_atoms(qm_list, atoms)
   return qmmm_pot
 
 def pass_trajectory_context(trajectory, dynamics):

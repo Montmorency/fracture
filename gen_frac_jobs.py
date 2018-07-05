@@ -2,9 +2,10 @@ import sys
 import os
 import shutil
 import itertools
-from fracture import crack as frac
 import pickle
 import ase.units as units
+
+from fracture import crack as frac
 
 # Open a new directory for each
 # configuration, input crack_dict for that 
@@ -24,6 +25,7 @@ crack_front     = (0, 1, -1)    # Miller index of z-axis
 #crack_direction = (0,0,-1)
 #cleavage_plane  = (1,1,0)
 #crack_front     = (1,-1,0)
+
 for cleave, g in itertools.product(*[cleavage_planes, G]):
 	cleave_string = '{0}{1}{2}'.format(cleave[0], cleave[1], cleave[2])
 	g_string      = str(g).replace('.','')

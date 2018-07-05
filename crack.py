@@ -3,25 +3,25 @@ Module containing CrackCell object.
 """
 from cStringIO import StringIO
 import sys
-import pickle
+import json
 
 import ase.units as units
-from   ase.lattice       import bulk
-from   ase.constraints   import FixAtoms
-from   ase.lattice.cubic import Diamond, BodyCenteredCubic
-from   ase.optimize      import FIRE
+from ase.lattice import bulk
+from ase.constraints import FixAtoms
+from ase.lattice.cubic import Diamond, BodyCenteredCubic
+from ase.optimize import FIRE
 #from  ase.optimize      import LBFGS
 #preconditioned LBFGS is !much! faster for the crack slab
 #relaxations tested so far.
-from   ase.optimize.precon  import PreconLBFGS, PreconFIRE
-from   quippy            import set_fortran_indexing
-from   quippy.potential  import Potential, Minim
-from   quippy.elasticity import youngs_modulus, poisson_ratio, rayleigh_wave_speed, AtomResolvedStressField
-from   quippy.io    import write
-from   quippy.crack import print_crack_system, G_to_strain,\
+from ase.optimize.precon  import PreconLBFGS, PreconFIRE
+from quippy import set_fortran_indexing
+from quippy.elasticity import youngs_modulus, poisson_ratio, rayleigh_wave_speed, AtomResolvedStressField
+from quippy.io import write
+from quippy.crack import print_crack_system, G_to_strain,\
                             thin_strip_displacement_y,\
                             find_crack_tip_stress_field
 
+from quippy import Potential
 from quippy import bcc, calc_nye_tensor, Atoms, supercell
 
 import os
@@ -72,15 +72,6 @@ def init_dict(**kwargs):
     default_crack_params[key] = kwargs[key]
   return default_crack_params
 
-def gen_inputfile(crack_dict, filename):
-  f = open(filename.join('.pckl'), 'w')
-  g = open(filename.join('txt', 'w'))
-  for key, value in crack_dict.items():
-    print >> g, key, value
-  pickle.dump(f, crack_dict)
-  f.close()
-  g.close()
-
 #Capturing
 class Capturing(list):
   def __enter__(self):
@@ -101,7 +92,7 @@ class CrackCell(object):
   initial configuration.
   """
   def __init__(self, cij=[], **kwargs):
-    self.symbol = 'Si'
+    self.symbol = 'Fe'
     self.width  = 500.0*units.Ang        # Width of crack slab
     self.height = 166.0*units.Ang        # Height of crack slab
     self.vacuum = 100.0*units.Ang        # Amount of vacuum around slab
@@ -114,10 +105,10 @@ class CrackCell(object):
     self.mm_init_args    = 'IP SW' # Initialisation arguments
                                    # for the classical potential
     self.output_file     = 'crack.xyz'
-    self.cleavage_plane  = (-2, 1, 1)
-    self.crack_direction = (0, 1, -1)
-    self.crack_front     = (1,1,1)
-    self.a0              = 2.83
+    self.cleavage_plane  = (1, 1, 1)
+    self.crack_direction = (1, 1, -2)
+    self.crack_front     = (1,-1,0)
+    self.a0              = 2.8293
     self.nx              = 1
     self.ny              = 1
 #These are derived properties cell must be initialized before
@@ -141,7 +132,7 @@ class CrackCell(object):
       print_crack_system(self.crack_direction, self.cleavage_plane, self.crack_front)
     return '\n'.join(output)
   
-  def calculate_c(self,size=(1,1,1)):
+  def calculate_c(self, pot, size=(1,1,1)):
     """
     Calculate the elastic constants for the underlying crack unit cell.
     """
@@ -151,14 +142,9 @@ class CrackCell(object):
       at_bulk = BodyCenteredCubic(directions=[self.crack_direction, self.cleavage_plane, self.crack_front],
                                size=size, symbol='Fe', pbc=(1,1,1),
                                latticeconstant=self.a0)
-    try:
-      pot_dir  = os.environ['POTDIR']
-    except:
-      print 'POTDIR not defined in os environment.'
-      raise
-    pot_file = os.path.join(pot_dir, self.param_file)
-    pot     = Potential(self.mm_init_args, param_filename=pot_file)
-    at_bulk.info['adsorbate_info'] = None
+    #pot_file = os.path.join(pot_dir, self.param_file)
+    #pot = Potential(self.mm_init_args, param_filename=pot_file)
+#   at_bulk.info['adsorbate_info'] = None
     at_bulk.set_calculator(pot)
     self.cij  = pot.get_elastic_constants(at_bulk)
     print((self.cij / units.GPa).round(2))
@@ -180,13 +166,16 @@ class CrackCell(object):
     unit_slab.info['adsorbate_info'] = None
     unit_slab.positions[:, 1] += (unit_slab.positions[1, 1]-unit_slab.positions[0, 1])/2.0
     unit_slab.set_scaled_positions(unit_slab.get_scaled_positions())
-    pot_dir  = os.environ['POTDIR']
+    pot_dir = os.environ['POTDIR']
     pot_file = os.path.join(pot_dir, self.param_file)
-    pot     = Potential(self.mm_init_args, param_filename = pot_file)
-    unit_slab.set_calculator(pot)
+    print pot_file
+    print self.mm_init_args
+    #pot = Potential(self.mm_init_args, param_filename = pot_file)
+    #pot = Potential("IP EAM_ErcolAd do_rescale_r=T r_scale=1.00894848312" , param_filename = "/Users/lambert/pymodules/imeall/imeall/potentials/PotBH.xml")
+    #unit_slab.set_calculator(pot)
     return unit_slab
 
-  def build_surface(self, size=(1,1,1)):
+  def build_surface(self,pot, size=(1,1,1)):
     """
     Create an equivalent surface unit cell for the fracture system.
     """
@@ -203,13 +192,10 @@ class CrackCell(object):
     unit_slab.set_scaled_positions(unit_slab.get_scaled_positions())
     surface = unit_slab.copy()
     surface.center(vacuum=self.vacuum, axis=1)
-    pot_dir  = os.environ['POTDIR']
-    pot_file = os.path.join(pot_dir, self.param_file)
-    pot     = Potential(self.mm_init_args, param_filename=pot_file)
     surface.set_calculator(pot)
     return surface
 
-  def build_crack_cell(self, unit_slab, fix_dist=1.0):
+  def build_crack_cell(self, unit_slab, pot, fix_dist=1.0):
     """
     Creates a CrackCell of the desired size and orientation
     with the top and bottom layer of atoms constrained.
@@ -258,8 +244,6 @@ class CrackCell(object):
          (self.strain, self.initial_G / (units.J / units.m**2)))
 
     pot_dir  = os.environ['POTDIR']
-    pot_file = os.path.join(pot_dir, self.param_file)
-    pot      = Potential(self.mm_init_args, param_filename=pot_file)
     crack_slab.set_calculator(pot)
 #Initial crack pos
     print 'crack_pos before relaxations'
@@ -272,7 +256,7 @@ class CrackCell(object):
   def calc_nye_tensor(self, x):
     x.set_cutoff(3)
     x.calc_connect()
-    b = bcc(2.83, 26)
+    b = bcc(2.82893, 26)
     x0 = supercell(b, self.nx, self.ny, 1)
     x0.set_cutoff(3)
     x0.calc_connect()
@@ -308,12 +292,12 @@ class CrackCell(object):
     write('crack.xyz', crack_slab)
 
 if __name__ == '__main__':
-#load CrackCell Dictionary
+  #load CrackCell Dictionary from 'crack_info.json' file must be present
   try:
-    f          = open('crack_info.pckl', 'r')
-    crack_info = pickle.load(f)
+    with open('crack_info.json', 'r') as f:
+        crack_info = json.load(f)
     print 'Initializing crack_cell from Info File.'
-    crack      = CrackCell(**crack_info)
+    crack = CrackCell(**crack_info)
     f.close()
   except IOError:
     print 'no crack dictionary found.'
@@ -326,7 +310,7 @@ if __name__ == '__main__':
 
   pot_dir  = os.environ['POTDIR']
   pot_file = os.path.join(pot_dir, crack_info['param_file'])
-  mm_pot   = Potential('IP EAM_ErcolAd', param_filename=pot_file, cutoff_skin=2.0)
+  mm_pot   = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale=1.00894848312', param_filename=pot_file, cutoff_skin=2.0)
 
 # gb_frac.py will generate the frac_cell.xyz file which contains 
 # a crack_cell:
@@ -335,10 +319,10 @@ if __name__ == '__main__':
     unit_slab.set_calculator(mm_pot)
 
 #calculate the elasticity tensor:
-  crack.calculate_c()
-  surface    = crack.build_surface()
+  crack.calculate_c(mm_pot)
+  surface    = crack.build_surface(mm_pot)
   E_surf = surface.get_potential_energy()
-  bulk = bcc(2.83)
+  bulk = bcc(2.82893)
   bulk.set_atoms(26)
   bulk.info['adsorbate_info']=None
   bulk.set_calculator(mm_pot)
@@ -348,5 +332,5 @@ if __name__ == '__main__':
   gamma = (E_surf - E_bulk*len(surface))/(2.0*area)
   print('Surface energy of %s surface %.4f J/m^2\n' %
        (crack.cleavage_plane, gamma/(units.J/units.m**2)))
-  crack_slab = crack.build_crack_cell(unit_slab)
+  crack_slab = crack.build_crack_cell(unit_slab, mm_pot)
   crack.write_crack_cell(crack_slab, mm_pot)
