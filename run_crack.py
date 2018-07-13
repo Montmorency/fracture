@@ -31,8 +31,9 @@ from quippy.potential import Potential, ForceMixingPotential
 from quippy.system import verbosity_set_minimum, verbosity_to_str
 
 set_fortran_indexing(False)
-verbosity_set_minimum(3)
-print verbosity_to_str(3)
+VERBOSITY = 0
+verbosity_set_minimum(VERBOSITY)
+print verbosity_to_str(VERBOSITY)
 
 #lotf simulation parameters
 extrapolate_steps = 5        # Number of steps for predictor-corrector
@@ -90,14 +91,15 @@ if __name__=='__main__':
   if args.output_file:
     traj_file = args.output_file
 
+  qm_inner_radius = 6.0
+  qm_outer_radius = 8.5
+
 # Potential information
   POT_DIR = os.path.join(app.root_path, 'potentials')
   eam_pot = os.path.join(POT_DIR, 'PotBH.xml')
   mpirun = spawn.find_executable('mpirun')
   vasp = '/home/mmm0007/vasp/vasp.5.4.1/bin/vasp_std'
 
-  qm_inner_radius = 6.0
-  qm_outer_radius = 9.0
   atoms = AtomsReader(args.input_file)[-1]
   strain_atoms = fix_edges(atoms)
   #setting cutoff to potential distance.
@@ -175,10 +177,8 @@ if __name__=='__main__':
     r_scale = 1.00894848312
     mm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=2.0)
     #r_scale = 0.98
-    #qm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=2.0)
+    qm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=2.0)
     #quippy using atomic units
-    qm_inner_radius = 6.0*units.Ang
-    qm_outer_radius = 8.5*units.Ang
 
 #    cluster_args = dict(single_cluster=True,
 #                       cluster_calc_connect=True,
@@ -231,9 +231,11 @@ if __name__=='__main__':
         qm_ats = ats[qm_list]
         write_xyz('cluster.xyz', qm_ats, append=True)
 
-    def write_slab(ats=atoms):
-        write_xyz('crack_slab.xyz', ats, append=True)
+    def write_slab(dynamics=dynamics):
+        if dynamics.state == LOTFDynamics.Interpolation:
+            write_xyz('crack_slab.xyz', dynamics.atoms, append=True)
 
+    #dynamics.attach(write_cluster, interval=1)
     dynamics.attach(print_context, interval=1)
     dynamics.attach(write_slab, interval=1)
     print 'Running Dynamics'
@@ -263,6 +265,6 @@ if __name__=='__main__':
 
     def write_slab(a=atoms):
         write_xyz('crack_traj.xyz', a, append=True)
-    dyanmics.attach(traj.write, interval=8)
+    dyanmics.attach(write_slab, interval=8)
     dynamics.run(nsteps)
     print 'Crack Simulation Finished'
