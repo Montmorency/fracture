@@ -98,7 +98,7 @@ if __name__=='__main__':
     POT_DIR = os.path.join(app.root_path, 'potentials')
     eam_pot = os.path.join(POT_DIR, 'PotBH.xml')
     r_scale = 1.00894848312
-    mm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot)
+    mm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=cutoff_skin)
 
     atoms = AtomsReader(args.input_file)[-1]
     strain_atoms = fix_edges(atoms)
@@ -155,8 +155,6 @@ if __name__=='__main__':
         print 'strain', get_strain(ats)
     dynamics.attach(print_context, interval=8)
     print 'Running Crack Simulation'
-    traj = Trajectory('run_crack.traj', 'w', atoms)
-    dynamics.attach(traj.write, interval=32)
     dynamics.run(nsteps)
     print 'Crack Simulation Finished'
 
@@ -180,8 +178,8 @@ if __name__=='__main__':
     print 'Running Crack Simulation'
     #traj = Trajectory('run_crack_IV.traj', 'w', atoms)
     #dynamics.attach(traj.write, interval=32)
-    def write_slab(a=atoms):
-        write_xyz('crack_traj.xyz', a, append=True)
+    #def write_slab(a=atoms):
+    #    write_xyz('crack_traj.xyz', a, append=True)
     dyanmics.attach(traj.write, interval=8)
     dynamics.run(nsteps)
     print 'Crack Simulation Finished'
