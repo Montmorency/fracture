@@ -100,6 +100,8 @@ if __name__=='__main__':
   qm_outer_radius = 9.0
   atoms = AtomsReader(args.input_file)[-1]
   strain_atoms = fix_edges(atoms)
+  #setting cutoff to potential distance.
+  atoms.cutoff = 5.30
   if args.socket or args.lotf:
       vasp_args = dict(xc='PBE', amix=0.01, amin=0.001, bmix=0.001, amix_mag=0.01, bmix_mag=0.001,
                        kpts=[1, 1, 4], kpar=1, lreal='auto', nelmdl=-15, ispin=2, prec='Accurate', ediff=1.e-4,
@@ -118,7 +120,7 @@ if __name__=='__main__':
                                exe=vasp, mpirun=mpirun, parmode='mpi',
                                ibrion=13, nsw=1000000,
                                npar=n_par, **vasp_args)
-      qm_pot = SocketCalculator(vasp_client)
+      qm_pot = Potential(calculator=SocketCalculator(vasp_client))
 
   if args.socket:
     print 'Initialize Potentials'
@@ -172,9 +174,8 @@ if __name__=='__main__':
     crack_pos = atoms.info['CrackPos']
     r_scale = 1.00894848312
     mm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=2.0)
-    r_scale = 0.98
+    #r_scale = 0.98
     #qm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=2.0)
-
     #quippy using atomic units
     qm_inner_radius = 6.0*units.Ang
     qm_outer_radius = 8.5*units.Ang
