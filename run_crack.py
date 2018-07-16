@@ -31,8 +31,9 @@ from quippy.potential import Potential, ForceMixingPotential
 from quippy.system import verbosity_set_minimum, verbosity_to_str
 
 set_fortran_indexing(False)
-verbosity_set_minimum(0)
-print verbosity_to_str(0)
+VERBOSITY = 3
+verbosity_set_minimum(VERBOSITY)
+print verbosity_to_str(VERBOSITY)
 
 #lotf simulation parameters
 extrapolate_steps = 5        # Number of steps for predictor-corrector
@@ -76,6 +77,7 @@ if __name__=='__main__':
   parser.add_argument("-r", "--restart",     help="If false thermalizes atoms and fixes boundary conditions,\
                                                    frame in trajectory.", action="store_true")
   parser.add_argument("-l", "--lotf", help="If true do a LOTF simulation.", action="store_true")
+  parser.add_argument("-c", "--check_force", help="Perform a quantum calculation at every stage of the dynamics.", action="store_true")
   parser.add_argument("-s", "--socket", help="If true do a verlet simulation with the ForceMixer.", action="store_true")
 
   args = parser.parse_args()
@@ -87,14 +89,15 @@ if __name__=='__main__':
   if args.output_file:
     traj_file = args.output_file
 
+  qm_inner_radius = 6.0
+  qm_outer_radius = 8.5
+
 # Potential information
   POT_DIR = os.path.join(app.root_path, 'potentials')
   eam_pot = os.path.join(POT_DIR, 'PotBH.xml')
   mpirun = spawn.find_executable('mpirun')
   vasp = '/home/mmm0007/vasp/vasp.5.4.1/bin/vasp_std'
 
-  qm_inner_radius = 6.0
-  qm_outer_radius = 9.0
   atoms = AtomsReader(args.input_file)[-1]
   strain_atoms = fix_edges(atoms)
   #setting cutoff to potential distance.
@@ -117,6 +120,7 @@ if __name__=='__main__':
                                exe=vasp, mpirun=mpirun, parmode='mpi',
                                ibrion=13, nsw=1000000,
                                npar=n_par, **vasp_args)
+
       qm_pot = Potential(calculator=SocketCalculator(vasp_client))
 
   if args.socket:
@@ -172,8 +176,6 @@ if __name__=='__main__':
     #r_scale = 0.98
     #qm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=2.0)
     #quippy using atomic units
-    qm_inner_radius = 6.0*units.Ang
-    qm_outer_radius = 8.5*units.Ang
 
 #    cluster_args = dict(single_cluster=True,
 #                       cluster_calc_connect=True,
@@ -195,42 +197,47 @@ if __name__=='__main__':
                                     lotf_spring_hops=3,
                                     buffer_hops=3,
                                     hysteretic_buffer=True,
+                                    cluster_vacuum = 5.0,
                                     hysteretic_buffer_inner_radius=qm_inner_radius,
                                     hysteretic_buffer_outer_radius=qm_outer_radius,
                                     cluster_hopping_nneighb_only=True,
                                     min_images_only=True)
 
-    qm_list = update_hysteretic_qm_region(atoms, [], crack_pos, qm_inner_radius, qm_outer_radius)
     atoms.set_calculator(qmmm_pot)
     qmmm_pot.atoms = atoms
+    qm_list = update_hysteretic_qm_region(atoms, [], crack_pos, qm_inner_radius, qm_outer_radius)
+    dynamics = LOTFDynamics(atoms, timestep, extrapolate_steps, check_force_error=args.check_force)
 
-    def update_qm_region(atoms, mm_pot=mm_pot, fixed_point=None):
-        crack_pos = find_crack_tip_stress_field(atoms, calc=mm_pot)
-        print crack_pos
+    # array to store time averaged stress field
+    avg_sigma = np.zeros((len(atoms), 3, 3))
+    def update_qm_region(atoms):
+        crack_pos = find_crack_tip_stress_field(atoms, calc=mm_pot, avg_sigma=avg_sigma)
         qm_list   = qmmm_pot.get_qm_atoms(atoms)
-        qm_list   = update_hysteretic_qm_region(atoms, qm_list, crack_pos, qm_inner_radius,
-                                                qm_outer_radius)
+        qm_list   = update_hysteretic_qm_region(atoms, qm_list, crack_pos,
+                                                qm_inner_radius, qm_outer_radius)
         qmmm_pot.set_qm_atoms(qm_list, atoms)
+        #assert (atoms.hybrid == 1).sum() == len(qm_list)
 
     print "Initialising Dynamics"
-    #dynamics = LOTFDynamics(atoms, timestep, extrapolate_steps, check_force_error=False, qm_update_func=update_qm_region)
-    dynamics = LOTFDynamics(atoms, timestep, extrapolate_steps)#, check_force_error=False)
+    dynamics.set_qm_update_func(update_qm_region)
 
     def print_context(ats=atoms, dyn=dynamics):
         print 'steps, T', dyn.nsteps, ats.get_kinetic_energy()/(1.5*units.kB*len(ats))
         print 'G', get_energy_release_rate(ats)/(units.J/units.m**2)
         print 'strain', get_strain(ats)
+        print 'state', dynamics.state
 
-    def write_cluster(ats=atoms, qmmm_pot=qmmm_pot):
-        qm_list = qmmm_pot.get_qm_atoms(ats)
-        qm_ats = ats[qm_list]
-        write_xyz('cluster.xyz', qm_ats, append=True)
+#   def write_cluster(ats=atoms, qmmm_pot=qmmm_pot):
+#       qm_list = qmmm_pot.get_qm_atoms(ats)
+#       qm_ats = ats[qm_list]
+#       write_xyz('cluster.xyz', qm_ats, append=True)
 
     def write_slab(dynamics=dynamics):
         if dynamics.state == LOTFDynamics.Interpolation:
+            dynamics.atoms.set_array('avg_sigma', avg_sigma.reshape((len(atoms), 9)))
             write_xyz('crack_slab.xyz', dynamics.atoms, append=True)
 
-    dynamics.attach(print_context, interval=8)
+    dynamics.attach(print_context, interval=1)
     dynamics.attach(write_slab, interval=1)
     print 'Running Dynamics'
     dynamics.run(nsteps)
