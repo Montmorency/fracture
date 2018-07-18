@@ -173,8 +173,9 @@ if __name__=='__main__':
     crack_pos = atoms.info['CrackPos']
     r_scale = 1.00894848312
     mm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=2.0)
-    #r_scale = 0.98
-    #qm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=2.0)
+    #test potential
+    r_scale = 0.98
+    qm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=2.0)
     #quippy using atomic units
 
 #    cluster_args = dict(single_cluster=True,
