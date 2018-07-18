@@ -35,6 +35,14 @@ VERBOSITY = 3
 verbosity_set_minimum(VERBOSITY)
 print verbosity_to_str(VERBOSITY)
 
+def log_pred_corr_errors(dynamics, logfile):
+    logline = '%s err %10.1f%12.6f%12.6f\n' % (dynamics.state_label,
+                                           dynamics.get_time()/units.fs,
+                                           dynamics.rms_force_error,
+                                           dynamics.max_force_error)
+    print logline
+    logfile.write(logline)
+
 #lotf simulation parameters
 extrapolate_steps = 5        # Number of steps for predictor-corrector
                              # interpolation and extrapolation
@@ -116,6 +124,7 @@ if __name__=='__main__':
           for _npar in range(2, int(np.sqrt(1.*procs))):
               if procs % int(_npar) == 0:
                   n_par = procs // int(_npar)
+
       vasp_client = VaspClient(client_id=0, npj=procs, ppn=1,
                                exe=vasp, mpirun=mpirun, parmode='mpi',
                                ibrion=13, nsw=1000000,
@@ -144,9 +153,6 @@ if __name__=='__main__':
     print ("together with the buffer of %.1f" % (qm_inner_radius + qm_outer_radius ) +
                                     "A %i" % np.count_nonzero(qm_buffer_mask))
 
-
-
-
     qmmm_pot = ForceMixingCarvingCalculator(atoms, qm_region_mask,
                                             mm_pot, qm_pot,
                                             buffer_width=qm_outer_radius,
@@ -168,7 +174,6 @@ if __name__=='__main__':
     print 'Running Crack Simulation'
     dynamics.run(nsteps)
     print 'Crack Simulation Finished'
-
   elif args.lotf:
     crack_pos = atoms.info['CrackPos']
     r_scale = 1.00894848312
@@ -177,27 +182,15 @@ if __name__=='__main__':
     #qm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=2.0)
     #quippy using atomic units
 
-#    cluster_args = dict(single_cluster=True,
-#                       cluster_calc_connect=True,
-#                       cluster_hopping=False,
-#                       cluster_hopping_nneighb_only=True,
-#                       cluster_periodic_z = True, # match Gamma vs. kpts
-#                       cluster_vacuum     = 5.0,
-#                       hysteretic_buffer=True,
-#                       hysteretic_buffer_inner_radius=qm_inner_radius,
-#                       hysteretic_buffer_outer_radius=qm_outer_radius,
-#                       min_images_only=True,
-#                       terminate=False,
-#                       force_no_fix_termination_clash=True,
-#                       randomise_buffer=False)
-
     qmmm_pot = ForceMixingPotential(pot1=mm_pot, pot2=qm_pot, atoms=atoms,
-                                    qm_args_str='cluster_periodic_z calc_connect=T',
+                                    qm_args_str='carve_cluster=T cluster_periodic_z calc_connect=T single_cluster=T',
                                     fit_hops=4,
                                     lotf_spring_hops=3,
                                     buffer_hops=3,
                                     hysteretic_buffer=True,
                                     cluster_vacuum = 5.0,
+                                    cluster_hopping = False,
+                                    single_cluster=True,
                                     hysteretic_buffer_inner_radius=qm_inner_radius,
                                     hysteretic_buffer_outer_radius=qm_outer_radius,
                                     cluster_hopping_nneighb_only=True,
@@ -206,7 +199,12 @@ if __name__=='__main__':
     atoms.set_calculator(qmmm_pot)
     qmmm_pot.atoms = atoms
     qm_list = update_hysteretic_qm_region(atoms, [], crack_pos, qm_inner_radius, qm_outer_radius)
+    atoms.hybrid[qm_list] = HYBRID_ACTIVE_MARK
     dynamics = LOTFDynamics(atoms, timestep, extrapolate_steps, check_force_error=args.check_force)
+
+    if args.check_force:
+        pred_corr_logfile = open('pred-corr-error.txt','w')
+        dynamics.attach(log_pred_corr_errors, 1, dynamics, pred_corr_logfile)
 
     # array to store time averaged stress field
     avg_sigma = np.zeros((len(atoms), 3, 3))
@@ -241,6 +239,8 @@ if __name__=='__main__':
     dynamics.attach(write_slab, interval=1)
     print 'Running Dynamics'
     dynamics.run(nsteps)
+    if args.check_force:
+        pred_corr_logfile.close()
   else:
     mm_pot = Potential(mm_init_args, param_filename=pot_file, cutoff_skin=cutoff_skin)
     atoms = AtomsReader(args.input_file)[-1]
@@ -248,7 +248,6 @@ if __name__=='__main__':
     strain_atoms = fix_edges(atoms)
     current_crack_pos = find_crack_tip_stress_field(atoms, calc=mm_pot)
     print 'Current Crack Position: ', current_crack_pos
-
     if not args.restart: 
       print 'Thermalizing Atoms'
       MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)

@@ -261,9 +261,9 @@ if __name__=='__main__':
         qm_list   = update_hysteretic_qm_region(atoms, [], crackpos, params.qm_inner_radius,
                                                 params.qm_outer_radius,
                                                 update_marks=False)
-        atoms.hybrid[qm_list]     = HYBRID_ACTIVE_MARK
+        atoms.hybrid[qm_list] = HYBRID_ACTIVE_MARK
         atoms.hybrid_vec[qm_list] = HYBRID_ACTIVE_MARK
-        atoms.hybrid_1[qm_list]   = HYBRID_ACTIVE_MARK
+        atoms.hybrid_1[qm_list] = HYBRID_ACTIVE_MARK
         atoms.hybrid_mark_1[qm_list] = HYBRID_ACTIVE_MARK
         atoms.params['core'] = crackpos
         print HYBRID_ACTIVE_MARK
