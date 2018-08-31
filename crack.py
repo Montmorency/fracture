@@ -111,6 +111,7 @@ class CrackCell(object):
     self.a0              = 2.8293
     self.nx              = 1
     self.ny              = 1
+    self.nz              = 1
 #These are derived properties cell must be initialized before
 #they are calculated
     self.cij             = cij
@@ -142,9 +143,6 @@ class CrackCell(object):
       at_bulk = BodyCenteredCubic(directions=[self.crack_direction, self.cleavage_plane, self.crack_front],
                                size=size, symbol='Fe', pbc=(1,1,1),
                                latticeconstant=self.a0)
-    #pot_file = os.path.join(pot_dir, self.param_file)
-    #pot = Potential(self.mm_init_args, param_filename=pot_file)
-#   at_bulk.info['adsorbate_info'] = None
     at_bulk.set_calculator(pot)
     self.cij  = pot.get_elastic_constants(at_bulk)
     print((self.cij / units.GPa).round(2))
@@ -207,7 +205,7 @@ class CrackCell(object):
       self.ny +=1
     #self.ny = 1
     print 'number of unit cells', self.nx, self.ny
-    crack_slab = unit_slab*(self.nx, self.ny,1)
+    crack_slab = unit_slab*(self.nx, self.ny,self.nz)
     write('ref_slab.xyz', crack_slab)
     crack_slab.center(self.vacuum, axis=0)
     crack_slab.center(self.vacuum, axis=1)
@@ -228,8 +226,10 @@ class CrackCell(object):
                   (abs(crack_slab.positions[:, 1] - bottom) < 1.0))
     const = FixAtoms(mask=fixed_mask)
     crack_slab.set_constraint(const)
-# Strain is a dimensionless ratio we require elastic tensor
-# to translate the initial energy flow to the tip into a strain.
+
+#Strain is a dimensionless ratio we require elastic tensor
+#to translate the initial energy flow to the tip into a strain.
+
     self.E  = youngs_modulus(self.cij, self.cleavage_plane)
     self.nu = poisson_ratio(self.cij, self.cleavage_plane, self.crack_direction)
     self.strain = G_to_strain(self.initial_G, self.E, self.nu, self.orig_height)
