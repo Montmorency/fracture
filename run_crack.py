@@ -82,7 +82,7 @@ if __name__=='__main__':
                                                    Default is crack.xyz.", default='crack.xyz')
   parser.add_argument("-o", "--output_file", help="File trajectory is written to.", default='./crack_traj.xyz')
   parser.add_argument("-p", "--pot_file",    help="Potential is set.", default=os.path.join(pot_dir,'PotBH.xml'))
-  parser.add_argument("-r", "--restart",     help="If false thermalizes atoms and fixes boundary conditions,\
+  parser.add_argument("-r", "--restart",     help="If this is not present thermalize atoms and fix boundary conditions,\
                                                    frame in trajectory.", action="store_true")
   parser.add_argument("-l", "--lotf", help="If true do a LOTF simulation.", action="store_true")
   parser.add_argument("-c", "--check_force", help="Perform a quantum calculation at every stage of the dynamics.", action="store_true")
@@ -260,11 +260,13 @@ if __name__=='__main__':
         print 'G', get_energy_release_rate(ats)/(units.J/units.m**2)
         print 'strain', get_strain(ats)
 
-    dynamics.attach(print_context, interval=8)
+    #for 0.25 fs time step we have an image every half 
+    #phonon cycle which is plenty
+    dynamics.attach(print_context, interval=32)
     print 'Running Crack Simulation'
     #    write_xyz('crack_traj.xyz', a, append=True)
     def write_slab(a=atoms):
         write_xyz('crack_traj.xyz', a, append=True)
-    dyanmics.attach(write_slab, interval=8)
+    dynamics.attach(write_slab, interval=32)
     dynamics.run(nsteps)
     print 'Crack Simulation Finished'
