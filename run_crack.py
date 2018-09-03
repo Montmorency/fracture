@@ -107,6 +107,10 @@ if __name__=='__main__':
   vasp = '/home/mmm0007/vasp/vasp.5.4.1/bin/vasp_std'
 
   atoms = AtomsReader(args.input_file)[-1]
+
+      #if key in prop_keys:
+      #  del(atoms.properties[key])
+
   strain_atoms = fix_edges(atoms)
   #setting cutoff to potential distance.
   atoms.cutoff = 5.30
@@ -164,6 +168,8 @@ if __name__=='__main__':
         print 'Thermalizing atoms'
         np.random.seed(42)
         MaxwellBoltzmannDistribution(atoms, 2.0*sim_T)
+
+
     dynamics = VelocityVerlet(atoms, timestep)
 
     def print_context(ats=atoms, dyn=dynamics):
@@ -246,6 +252,15 @@ if __name__=='__main__':
     mm_pot = Potential(mm_init_args, param_filename=pot_file, cutoff_skin=cutoff_skin)
     atoms = AtomsReader(args.input_file)[-1]
     atoms.set_calculator(mm_pot)
+    if args.restart:
+#delete certain keys so they don't cause problem in write_xyz.
+        del_keys = ['force','forces', 'forces0']
+        array_keys = atoms.arrays.keys()
+        prop_keys = atoms.properties.keys()
+        for key in del_keys:
+            if key in array_keys:
+                del(atoms.arrays[key])
+
     strain_atoms = fix_edges(atoms)
     current_crack_pos = find_crack_tip_stress_field(atoms, calc=mm_pot)
     print 'Current Crack Position: ', current_crack_pos
@@ -266,6 +281,8 @@ if __name__=='__main__':
     print 'Running Crack Simulation'
     #    write_xyz('crack_traj.xyz', a, append=True)
     def write_slab(a=atoms):
+        print a.properties.keys()
+        print a.arrays.keys()
         write_xyz('crack_traj.xyz', a, append=True)
     dynamics.attach(write_slab, interval=32)
     dynamics.run(nsteps)
