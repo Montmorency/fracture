@@ -265,6 +265,6 @@ if __name__=='__main__':
     #    write_xyz('crack_traj.xyz', a, append=True)
     def write_slab(a=atoms):
         write_xyz('crack_traj.xyz', a, append=True)
-    dyanmics.attach(write_slab, interval=8)
+    dyanmics.attach(write_slab, interval=1)
     dynamics.run(nsteps)
     print 'Crack Simulation Finished'
