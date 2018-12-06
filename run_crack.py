@@ -87,6 +87,7 @@ if __name__=='__main__':
   parser.add_argument("-l", "--lotf", help="If true do a LOTF simulation.", action="store_true")
   parser.add_argument("-c", "--check_force", help="Perform a quantum calculation at every stage of the dynamics.", action="store_true")
   parser.add_argument("-s", "--socket", help="If true do a verlet simulation with the ForceMixer.", action="store_true")
+  parser.add_argument("-k", "--kpar", help="kpoint parallelization (KPAR)", default=4, type=int)
 
   args = parser.parse_args()
 
@@ -113,10 +114,10 @@ if __name__=='__main__':
 
   strain_atoms = fix_edges(atoms)
   #setting cutoff to potential distance.
-  atoms.cutoff = 5.30
+  atoms.cutoff = 3.00
   if args.socket or args.lotf:
       vasp_args = dict(xc='PBE', amix=0.01, amin=0.001, bmix=0.001, amix_mag=0.01, bmix_mag=0.001,
-                       kpts=[1, 1, 4], kpar=1, lreal='auto', nelmdl=-15, ispin=2, prec='Accurate', ediff=1.e-4,
+                       kpts=[1, 1, 8], kpar=args.kpar, lreal='auto', nelmdl=-15, ispin=2, prec='Accurate', ediff=1.e-4,
                        nelm=100, algo='VeryFast', lplane=False, lwave=False, lcharg=False, istart=0, encut=400,
                        maxmix=30, voskown=0, ismear=1, sigma=0.1, isym=0)
       procs = 96
@@ -157,6 +158,7 @@ if __name__=='__main__':
     print ("together with the buffer of %.1f" % (qm_inner_radius + qm_outer_radius ) +
                                     "A %i" % np.count_nonzero(qm_buffer_mask))
 
+    
     qmmm_pot = ForceMixingCarvingCalculator(atoms, qm_region_mask,
                                             mm_pot, qm_pot,
                                             buffer_width=qm_outer_radius,
@@ -185,18 +187,26 @@ if __name__=='__main__':
     r_scale = 1.00894848312
     mm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=2.0)
     #test potential
-    r_scale = 0.98
-    qm_pot = Potential('IP EAM_ErcolAd do_rescale_r=T r_scale={0}'.format(r_scale), param_filename=eam_pot, cutoff_skin=2.0)
-    #quippy using atomic units
 
+    #quippy using atomic units
+    atoms.cutoff = 3.0
+    atoms.set_cutoff(3.0)          
+    atoms.calc_connect()
+    
     qmmm_pot = ForceMixingPotential(pot1=mm_pot, pot2=qm_pot, atoms=atoms,
-                                    qm_args_str='carve_cluster=T cluster_periodic_z calc_connect=T single_cluster=T',
+                                    qm_args_str='carve_cluster=T cluster_periodic_z=T cluster_calc_connect=T '+
+                                                'single_cluster=T cluster_vacuum=5.0 terminate=F print_clusters=F '+
+                                                'cluster_allow_modification=F fix_termination_clash=F',
                                     fit_hops=4,
+                                    carve_cluster=True,
+                                    cluster_allow_modification=False,
                                     lotf_spring_hops=3,
+                                    terminate=False,
+                                    calc_connect=True,
                                     buffer_hops=3,
                                     hysteretic_buffer=True,
                                     cluster_vacuum = 5.0,
-                                    cluster_hopping = False,
+                                    cluster_hopping = True,
                                     single_cluster=True,
                                     hysteretic_buffer_inner_radius=qm_inner_radius,
                                     hysteretic_buffer_outer_radius=qm_outer_radius,
@@ -221,7 +231,6 @@ if __name__=='__main__':
         qm_list   = update_hysteretic_qm_region(atoms, qm_list, crack_pos,
                                                 qm_inner_radius, qm_outer_radius)
         qmmm_pot.set_qm_atoms(qm_list, atoms)
-        #assert (atoms.hybrid == 1).sum() == len(qm_list)
 
     print "Initialising Dynamics"
     dynamics.set_qm_update_func(update_qm_region)
@@ -231,11 +240,6 @@ if __name__=='__main__':
         print 'G', get_energy_release_rate(ats)/(units.J/units.m**2)
         print 'strain', get_strain(ats)
         print 'state', dynamics.state
-
-#   def write_cluster(ats=atoms, qmmm_pot=qmmm_pot):
-#       qm_list = qmmm_pot.get_qm_atoms(ats)
-#       qm_ats = ats[qm_list]
-#       write_xyz('cluster.xyz', qm_ats, append=True)
 
     def write_slab(dynamics=dynamics):
         if dynamics.state == LOTFDynamics.Interpolation:
@@ -279,10 +283,7 @@ if __name__=='__main__':
     #phonon cycle which is plenty
     dynamics.attach(print_context, interval=32)
     print 'Running Crack Simulation'
-    #    write_xyz('crack_traj.xyz', a, append=True)
     def write_slab(a=atoms):
-        print a.properties.keys()
-        print a.arrays.keys()
         write_xyz('crack_traj.xyz', a, append=True)
     dynamics.attach(write_slab, interval=32)
     dynamics.run(nsteps)
